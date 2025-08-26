@@ -53,7 +53,10 @@ function App() {
     };
 
     if (isAuthenticated) {
-      window.location.href = 'dashboard.html';
+      // Используем History API для красивого URL
+window.history.pushState({}, '', '/dashboard');
+// И перезагружаем страницу чтобы сервер отдал index.html для нового URL
+window.location.reload();
       return null;
     }
 
