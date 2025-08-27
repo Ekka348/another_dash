@@ -265,6 +265,14 @@ function AccessDenied() {
   );
 }
 
+fetch('/api/bitrix-fetch')
+  .then(res => res.json())
+  .then(leads => {
+    renderLeads(leads); // твоя функция отрисовки
+  });
+
+
+
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
   <ErrorBoundary>
