@@ -1,6 +1,6 @@
 // Bitrix24 API configuration and methods
 const BITRIX_CONFIG = {
-  domain: '', // Будет настроено пользователем
+  domain: '', // Будет настроено автоматически
   webhook: '', // Webhook для доступа к API
   userId: '', // ID пользователя
 };
@@ -70,10 +70,11 @@ async function bitrixApiCall(method, params = {}) {
 // Получение лидов из Bitrix24
 async function fetchBitrixLeads() {
   const leads = await bitrixApiCall('crm.lead.list', {
-    select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY'],
+    select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
     filter: {
-      'STATUS_ID': ['CALLBACK', 'APPROVAL', 'INVITED'] // Настраиваемые статусы
-    }
+      'STATUS_ID': ['IN_PROCESS', 'UC_A2DF81', 'CONVERTED']
+    },
+    order: { 'DATE_CREATE': 'DESC' }
   });
 
   return leads.map(lead => ({
@@ -82,7 +83,7 @@ async function fetchBitrixLeads() {
     stage: mapBitrixStatusToStage(lead.STATUS_ID),
     operator_id: lead.ASSIGNED_BY_ID,
     status: lead.STATUS_ID,
-    last_updated: lead.DATE_MODIFY
+    last_updated: lead.DATE_MODIFY || lead.DATE_CREATE
   }));
 }
 
@@ -91,7 +92,8 @@ async function fetchBitrixUsers() {
   const users = await bitrixApiCall('user.get', {
     filter: {
       'ACTIVE': 'Y'
-    }
+    },
+    select: ['ID', 'NAME', 'LAST_NAME', 'WORK_DEPARTMENT', 'IS_ONLINE', 'LAST_ACTIVITY_DATE']
   });
 
   return users.map(user => ({
@@ -106,12 +108,9 @@ async function fetchBitrixUsers() {
 // Маппинг статусов Bitrix24 на внутренние стадии
 function mapBitrixStatusToStage(statusId) {
   const mapping = {
-    'NEW': 'callback',
-    'IN_PROCESS': 'callback',
-    'CALLBACK': 'callback',
-    'APPROVAL': 'approval',
-    'INVITED': 'invited',
-    'CONVERTED': 'invited'
+    'IN_PROCESS': 'callback',          // Перезвонить
+    'UC_A2DF81': 'approval',           // На согласовании
+    'CONVERTED': 'invited'             // Приглашен к рекрутеру
   };
   
   return mapping[statusId] || 'callback';
