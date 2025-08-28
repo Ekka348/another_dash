@@ -1,12 +1,45 @@
+import React from 'react';
+import {
+  Chart as ChartJS,
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  Title,
+  CategoryScale,
+  DoughnutController,
+  ArcElement,
+  BarController,
+  BarElement,
+  Tooltip,
+  Legend
+} from 'chart.js';
+
+// Регистрируем компоненты Chart.js
+ChartJS.register(
+  LineController,
+  LineElement,
+  PointElement,
+  LinearScale,
+  Title,
+  CategoryScale,
+  DoughnutController,
+  ArcElement,
+  BarController,
+  BarElement,
+  Tooltip,
+  Legend
+);
+
 function Chart({ title, type, data }) {
   try {
     const chartRef = React.useRef(null);
     const chartInstanceRef = React.useRef(null);
 
     React.useEffect(() => {
-      if (chartRef.current && ChartJS) {
+      if (chartRef.current) {
         const ctx = chartRef.current.getContext('2d');
-        
+
         if (chartInstanceRef.current) {
           chartInstanceRef.current.destroy();
         }
@@ -59,3 +92,5 @@ function Chart({ title, type, data }) {
     );
   }
 }
+
+export default Chart;
