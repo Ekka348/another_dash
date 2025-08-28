@@ -5,7 +5,7 @@ export default async function handler(req, res) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      select: ['ID', 'TITLE', 'STATUS_ID'],
+      select: ['ID', 'TITLE', 'STATUS_ID', 'DATE_CREATE'], // 👈 добавлено
       order: { ID: 'DESC' }
     })
   });
