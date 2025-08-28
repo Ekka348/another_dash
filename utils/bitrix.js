@@ -7,13 +7,11 @@ const BitrixService = {
     "CONVERTED": "Приглашен к рекрутеру"
   },
 
-  // Флаг для отслеживания режима демо
   isDemoMode: false,
 
-  // Основной метод для запросов к Битрикс24 API
   async makeBitrixRequest(method, params = {}) {
     try {
-      console.log('Bitrix API Request:', { method, params, url: this.webhookUrl + method });
+      console.log('Bitrix API Request:', { method, params });
 
       const response = await fetch(this.webhookUrl + method, {
         method: 'POST',
@@ -46,14 +44,13 @@ const BitrixService = {
     }
   },
 
-  // Получение лидов
   async getLeads(dateFrom = null, dateTo = null) {
     try {
       const params = {
         select: ['ID', 'STATUS_ID', 'DATE_CREATE', 'DATE_MODIFY', 'TITLE', 'NAME', 'LAST_NAME'],
         filter: {},
         order: { 'DATE_CREATE': 'DESC' },
-        start: -1 // Получаем все записи
+        start: -1
       };
 
       if (dateFrom) {
@@ -63,47 +60,39 @@ const BitrixService = {
         params.filter['<=DATE_CREATE'] = dateTo;
       }
 
-      console.log('Запрос лидов из Битрикс24 с параметрами:', params);
+      console.log('Запрос лидов из Битрикс24:', params);
 
       const data = await this.makeBitrixRequest('crm.lead.list', params);
       
       if (data && data.result && Array.isArray(data.result)) {
         this.isDemoMode = false;
-        console.log('Получены реальные данные из Битрикс24:', data.result.length, 'лидов');
+        console.log('Получены реальные данные:', data.result.length, 'лидов');
         return data.result;
       } else {
-        throw new Error('Пустой или неверный ответ от API');
+        throw new Error('Пустой ответ от API');
       }
 
     } catch (error) {
-      console.warn('Битрикс24 API недоступен, используются демо данные:', error.message);
+      console.warn('Битрикс24 API недоступен:', error.message);
       this.isDemoMode = true;
       return this.getDemoData(dateFrom, dateTo);
     }
   },
 
-  // Демо данные для тестирования
   getDemoData(dateFrom = null, dateTo = null) {
-    console.log('Генерация демо данных');
+    console.log('Используются демо данные');
     const now = new Date();
     const demoLeads = [];
     
     const stageIds = Object.keys(this.stages);
     
-    // Генерируем реалистичные данные
-    const getRandomDate = (startDate, endDate) => {
-      return new Date(startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime()));
-    };
-
-    // Данные за выбранный период или последние 90 дней по умолчанию
     const startDate = dateFrom ? new Date(dateFrom + 'T00:00:00') : new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
     const endDate = dateTo ? new Date(dateTo + 'T23:59:59') : now;
 
-    // Создаем 50-100 демо лидов
-    const leadCount = Math.floor(Math.random() * 50) + 50;
+    const leadCount = 75;
     
     for (let i = 0; i < leadCount; i++) {
-      const createDate = getRandomDate(startDate, endDate);
+      const createDate = new Date(startDate.getTime() + Math.random() * (endDate.getTime() - startDate.getTime()));
       const randomStage = stageIds[Math.floor(Math.random() * stageIds.length)];
       
       demoLeads.push({
@@ -111,16 +100,15 @@ const BitrixService = {
         STATUS_ID: randomStage,
         DATE_CREATE: createDate.toISOString(),
         DATE_MODIFY: createDate.toISOString(),
-        TITLE: `Лид #${i + 1}`,
-        NAME: ['Иван', 'Петр', 'Мария', 'Анна', 'Сергей'][Math.floor(Math.random() * 5)],
-        LAST_NAME: ['Иванов', 'Петров', 'Сидорова', 'Смирнова', 'Кузнецов'][Math.floor(Math.random() * 5)]
+        TITLE: `Лид ERS #${i + 1}`,
+        NAME: 'Тестовый',
+        LAST_NAME: 'Лид'
       });
     }
 
     return demoLeads;
   },
 
-  // Получение статистики по стадиям
   async getLeadsByStages(period = '30days') {
     try {
       const now = new Date();
@@ -139,23 +127,18 @@ const BitrixService = {
           dateFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
           dateTo = now.toISOString().split('T')[0];
           break;
-        case '90days':
-          dateFrom = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-          dateTo = now.toISOString().split('T')[0];
-          break;
         default:
           dateFrom = null;
           dateTo = null;
       }
 
-      console.log('Период для статистики:', period, 'от:', dateFrom, 'до:', dateTo);
+      console.log('Период:', period, 'от:', dateFrom, 'до:', dateTo);
       
       const leads = await this.getLeads(dateFrom, dateTo);
-      console.log('Всего лидов для статистики:', leads.length);
+      console.log('Всего лидов:', leads.length);
 
       const stageStats = {};
       
-      // Инициализируем все стадии с нулевыми значениями
       Object.keys(this.stages).forEach(stageId => {
         stageStats[stageId] = {
           name: this.stages[stageId],
@@ -164,13 +147,10 @@ const BitrixService = {
         };
       });
 
-      // Считаем лиды по стадиям
       leads.forEach(lead => {
         if (stageStats[lead.STATUS_ID]) {
           stageStats[lead.STATUS_ID].count++;
           stageStats[lead.STATUS_ID].leads.push(lead);
-        } else {
-          console.warn('Неизвестная стадия:', lead.STATUS_ID);
         }
       });
 
@@ -183,42 +163,6 @@ const BitrixService = {
     }
   },
 
-  // Получение тренда лидов
-  async getLeadsTrend(days = 7) {
-    try {
-      const trends = [];
-      const now = new Date();
-
-      for (let i = days - 1; i >= 0; i--) {
-        const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-        const dateStr = date.toISOString().split('T')[0];
-        const nextDate = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-        const nextDateStr = nextDate.toISOString().split('T')[0];
-
-        const leads = await this.getLeads(dateStr, nextDateStr);
-        
-        const dayStats = {
-          date: dateStr,
-          total: leads.length,
-          stages: {}
-        };
-
-        Object.keys(this.stages).forEach(stageId => {
-          dayStats.stages[stageId] = leads.filter(l => l.STATUS_ID === stageId).length;
-        });
-
-        trends.push(dayStats);
-      }
-
-      return trends;
-
-    } catch (error) {
-      console.error('Get leads trend error:', error);
-      throw error;
-    }
-  },
-
-  // Проверка соединения с Битрикс24
   async testConnection() {
     try {
       const params = {
@@ -241,42 +185,16 @@ const BitrixService = {
     } catch (error) {
       return {
         success: false,
-        message: 'Ошибка соединения с Битрикс24: ' + error.message,
+        message: 'Ошибка соединения: ' + error.message,
         isDemoMode: true
       };
     }
-  },
-
-  // Получение информации о текущем режиме
-  getCurrentMode() {
-    return {
-      isDemoMode: this.isDemoMode,
-      webhookUrl: this.webhookUrl
-    };
   }
 };
 
-// Глобальные функции для отладки
 window.testBitrixConnection = async function() {
   const result = await BitrixService.testConnection();
   console.log('Тест соединения:', result);
-  alert(`Соединение с Битрикс24: ${result.success ? 'УСПЕХ' : 'ОШИБКА'}\n${result.message}`);
+  alert(`Соединение: ${result.success ? 'УСПЕХ' : 'ОШИБКА'}\n${result.message}`);
   return result;
-};
-
-window.showBitrixInfo = function() {
-  const info = BitrixService.getCurrentMode();
-  console.log('Информация о Битрикс24:', info);
-  alert(`Режим: ${info.isDemoMode ? 'ДЕМО' : 'РЕАЛЬНЫЙ'}\nWebhook: ${info.webhookUrl}`);
-};
-
-window.getLeadsSample = async function() {
-  try {
-    const leads = await BitrixService.getLeads();
-    console.log('Пример лидов:', leads.slice(0, 5));
-    alert(`Получено лидов: ${leads.length}\nПервые 5: ${JSON.stringify(leads.slice(0, 5), null, 2)}`);
-  } catch (error) {
-    console.error('Ошибка получения лидов:', error);
-    alert('Ошибка: ' + error.message);
-  }
 };
