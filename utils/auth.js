@@ -1,8 +1,7 @@
 const AuthService = {
   users: [
-    { id: 1, email: 'admin@example.com', password: 'admin123', name: 'Администратор', role: 'admin' },
-    { id: 2, email: 'manager@example.com', password: 'manager123', name: 'Менеджер', role: 'manager' },
-    { id: 3, email: 'user@example.com', password: 'user123', name: 'Пользователь', role: 'user' }
+    { id: 1, email: 'admin@ers.ru', password: 'admin123', name: 'Администратор ERS', role: 'admin' },
+    { id: 2, email: 'manager@ers.ru', password: 'manager123', name: 'Менеджер ERS', role: 'manager' }
   ],
 
   login: function(email, password) {
@@ -51,9 +50,8 @@ const AuthService = {
       if (!user) return false;
       
       const roleHierarchy = {
-        'admin': 3,
-        'manager': 2,
-        'user': 1
+        'admin': 2,
+        'manager': 1
       };
       
       return roleHierarchy[user.role] >= roleHierarchy[requiredRole];
