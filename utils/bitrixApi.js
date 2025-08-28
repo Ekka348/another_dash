@@ -105,6 +105,18 @@ async function fetchBitrixUsers() {
   }));
 }
 
+// bitrixApi.js - добавьте эту функцию
+async function testBitrixConnection() {
+  try {
+    const result = await bitrixApiCall('app.info');
+    console.log('Подключение к Bitrix24 успешно:', result);
+    return true;
+  } catch (error) {
+    console.error('Ошибка подключения к Bitrix24:', error);
+    return false;
+  }
+}
+
 // Маппинг статусов Bitrix24 на внутренние стадии
 function mapBitrixStatusToStage(statusId) {
   const mapping = {
