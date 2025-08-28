@@ -5,6 +5,13 @@ const BitrixService = {
     CONVERTED: 'Приглашен к рекрутеру'
   },
 
+  // 👇 Парсинг даты в формате DD.MM.YYYY HH:mm:ss
+  parseBitrixDate(dateStr) {
+    const [datePart, timePart] = dateStr.split(' ');
+    const [day, month, year] = datePart.split('.');
+    return new Date(`${year}-${month}-${day}T${timePart}`);
+  },
+
   async getLeads() {
     const res = await fetch('/api/bitrix-fetch');
     const data = await res.json();
@@ -18,7 +25,7 @@ const BitrixService = {
     const grouped = {};
     for (const lead of filtered) {
       const stageId = lead.STATUS_ID;
-      if (!BitrixService.stages[stageId]) continue; // игнорируем ненужные стадии
+      if (!BitrixService.stages[stageId]) continue;
 
       if (!grouped[stageId]) {
         grouped[stageId] = { name: BitrixService.stages[stageId], count: 0 };
@@ -40,7 +47,7 @@ const BitrixService = {
       const dayStr = date.toISOString().split('T')[0];
 
       const dayLeads = leads.filter(lead => {
-        const created = new Date(lead.DATE_CREATE);
+        const created = BitrixService.parseBitrixDate(lead.DATE_CREATE);
         return created.toISOString().startsWith(dayStr);
       });
 
@@ -63,9 +70,15 @@ const BitrixService = {
     let fromDate = new Date();
 
     switch (period) {
-      case '7days': fromDate.setDate(now.getDate() - 7); break;
-      case '30days': fromDate.setDate(now.getDate() - 30); break;
-      case '90days': fromDate.setDate(now.getDate() - 90); break;
+      case '7days':
+        fromDate.setDate(now.getDate() - 7);
+        break;
+      case '30days':
+        fromDate.setDate(now.getDate() - 30);
+        break;
+      case '90days':
+        fromDate.setDate(now.getDate() - 90);
+        break;
       case 'today':
       default:
         fromDate.setHours(0, 0, 0, 0);
@@ -73,7 +86,7 @@ const BitrixService = {
     }
 
     return leads.filter(lead => {
-      const created = new Date(lead.DATE_CREATE);
+      const created = BitrixService.parseBitrixDate(lead.DATE_CREATE);
       return created >= fromDate;
     });
   }
