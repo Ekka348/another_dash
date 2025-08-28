@@ -1,4 +1,4 @@
-function SyncStatus({ lastSync, isLoading, onSync }) {
+function SyncStatus({ lastSync, isLoading, onSync, syncStatus }) {
   try {
     const formatSyncTime = (timestamp) => {
       if (!timestamp) return 'Никогда';
@@ -7,7 +7,7 @@ function SyncStatus({ lastSync, isLoading, onSync }) {
     };
 
     return (
-      <div className="flex items-center gap-3" data-name="sync-status" data-file="components/SyncStatus.js">
+      <div className="flex items-center gap-3" data-name="sync-status">
         <button
           onClick={onSync}
           disabled={isLoading}
@@ -24,6 +24,14 @@ function SyncStatus({ lastSync, isLoading, onSync }) {
         <div className="text-xs text-[var(--text-secondary)]">
           Последняя синхронизация: {formatSyncTime(lastSync)}
         </div>
+
+        {syncStatus && (
+          <div className={`text-xs ${
+            syncStatus.status === 'success' ? 'text-green-600' : 'text-red-600'
+          }`}>
+            {syncStatus.message}
+          </div>
+        )}
       </div>
     );
   } catch (error) {
