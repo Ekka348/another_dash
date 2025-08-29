@@ -1,14 +1,5 @@
 {
   "name": "bitrix24-dashboard",
   "version": "1.0.0",
-  "description": "Дашборд лидов Битрикс24",
-  "scripts": {
-    "start": "npx serve -s -l $PORT"
-  },
-  "dependencies": {
-    "serve": "^14.2.1"
-  },
-  "engines": {
-    "node": ">=18"
-  }
+  "description": "Дашборд лидов Битрикс24"
 }
