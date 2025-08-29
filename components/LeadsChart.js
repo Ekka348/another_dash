@@ -15,17 +15,36 @@ function LeadsChart({ type, data }) {
             );
         }
 
-        // Мемоизируем конфигурацию графиков
-        const chartConfig = React.useMemo(() => {
-            if (type === 'line') {
-                return {
+        // Создаем стабильные ссылки на данные
+        const chartData = React.useMemo(() => ({
+            callback: data.callback || 0,
+            approval: data.approval || 0,
+            invited: data.invited || 0
+        }), [data.callback, data.approval, data.invited]);
+
+        const chartType = React.useMemo(() => type, [type]);
+
+        React.useEffect(() => {
+            if (!chartRef.current) return;
+
+            const ctx = chartRef.current.getContext('2d');
+            
+            // Уничтожаем предыдущий график
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+
+            let config;
+            
+            if (chartType === 'line') {
+                config = {
                     type: 'line',
                     data: {
                         labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
                         datasets: [
                             {
                                 label: 'Перезвонить',
-                                data: [data.callback || 0, 0, 0, 0, 0, 0, 0], // TODO: Заменить на реальные временные данные
+                                data: [chartData.callback, 0, 0, 0, 0, 0, 0],
                                 borderColor: '#2563eb',
                                 backgroundColor: 'rgba(37, 99, 235, 0.1)',
                                 tension: 0.4,
@@ -34,7 +53,7 @@ function LeadsChart({ type, data }) {
                             },
                             {
                                 label: 'На согласовании',
-                                data: [data.approval || 0, 0, 0, 0, 0, 0, 0], // TODO: Заменить на реальные временные данные
+                                data: [chartData.approval, 0, 0, 0, 0, 0, 0],
                                 borderColor: '#f59e0b',
                                 backgroundColor: 'rgba(245, 158, 11, 0.1)',
                                 tension: 0.4,
@@ -43,7 +62,7 @@ function LeadsChart({ type, data }) {
                             },
                             {
                                 label: 'Приглашен к рекрутеру',
-                                data: [data.invited || 0, 0, 0, 0, 0, 0, 0], // TODO: Заменить на реальные временные данные
+                                data: [chartData.invited, 0, 0, 0, 0, 0, 0],
                                 borderColor: '#10b981',
                                 backgroundColor: 'rgba(16, 185, 129, 0.1)',
                                 tension: 0.4,
@@ -58,54 +77,29 @@ function LeadsChart({ type, data }) {
                         plugins: {
                             legend: {
                                 display: true,
-                                position: 'bottom',
-                                labels: {
-                                    usePointStyle: true,
-                                    padding: 20
-                                }
-                            },
-                            tooltip: {
-                                mode: 'index',
-                                intersect: false
+                                position: 'bottom'
                             }
                         },
                         scales: {
                             y: {
                                 beginAtZero: true,
-                                grid: {
-                                    drawBorder: false
-                                },
                                 ticks: {
                                     stepSize: 1
                                 }
-                            },
-                            x: {
-                                grid: {
-                                    display: false
-                                },
-                                ticks: {
-                                    maxRotation: 45
-                                }
                             }
-                        },
-                        interaction: {
-                            mode: 'nearest',
-                            axis: 'x',
-                            intersect: false
                         }
                     }
                 };
             } else {
-                return {
+                config = {
                     type: 'doughnut',
                     data: {
                         labels: ['Перезвонить', 'На согласовании', 'Приглашен к рекрутеру'],
                         datasets: [{
-                            data: [data.callback || 0, data.approval || 0, data.invited || 0],
+                            data: [chartData.callback, chartData.approval, chartData.invited],
                             backgroundColor: ['#2563eb', '#f59e0b', '#10b981'],
                             borderWidth: 0,
-                            hoverOffset: 10,
-                            borderColor: '#ffffff'
+                            hoverOffset: 10
                         }]
                     },
                     options: {
@@ -115,45 +109,23 @@ function LeadsChart({ type, data }) {
                         plugins: {
                             legend: {
                                 display: true,
-                                position: 'bottom',
-                                labels: {
-                                    usePointStyle: true,
-                                    padding: 20,
-                                    font: {
-                                        size: 12
-                                    }
-                                }
-                            },
-                            tooltip: {
-                                callbacks: {
-                                    label: function(context) {
-                                        return `${context.label}: ${context.raw} лидов`;
-                                    }
-                                }
+                                position: 'bottom'
                             }
                         }
                     }
                 };
             }
-        }, [type, data.callback, data.approval, data.invited]); // Правильные зависимости
 
-        React.useEffect(() => {
-            if (chartRef.current && data && chartConfig) {
-                const ctx = chartRef.current.getContext('2d');
-                
-                if (chartInstance.current) {
-                    chartInstance.current.destroy();
-                }
+            // Создаем новый график
+            chartInstance.current = new ChartJS(ctx, config);
 
-                chartInstance.current = new ChartJS(ctx, chartConfig);
-            }
-
+            // Cleanup функция
             return () => {
                 if (chartInstance.current) {
                     chartInstance.current.destroy();
                 }
             };
-        }, [chartConfig]); // Только одна зависимость
+        }, [chartType, chartData.callback, chartData.approval, chartData.invited]); // Стабильные зависимости
 
         return (
             <div className="h-64" data-name="leads-chart">
@@ -167,7 +139,6 @@ function LeadsChart({ type, data }) {
                 <div className="text-red-500 text-center">
                     <div className="icon-alert-circle text-3xl mb-2"></div>
                     <p>Ошибка загрузки графика</p>
-                    <p className="text-xs mt-1 text-gray-500">Обновите страницу</p>
                 </div>
             </div>
         );
