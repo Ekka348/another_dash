@@ -15,16 +15,137 @@ function LeadsChart({ type, data }) {
             );
         }
 
+        // Мемоизируем конфигурацию графиков
+        const chartConfig = React.useMemo(() => {
+            if (type === 'line') {
+                return {
+                    type: 'line',
+                    data: {
+                        labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+                        datasets: [
+                            {
+                                label: 'Перезвонить',
+                                data: [data.callback || 0, 0, 0, 0, 0, 0, 0], // TODO: Заменить на реальные временные данные
+                                borderColor: '#2563eb',
+                                backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2,
+                                fill: true
+                            },
+                            {
+                                label: 'На согласовании',
+                                data: [data.approval || 0, 0, 0, 0, 0, 0, 0], // TODO: Заменить на реальные временные данные
+                                borderColor: '#f59e0b',
+                                backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2,
+                                fill: true
+                            },
+                            {
+                                label: 'Приглашен к рекрутеру',
+                                data: [data.invited || 0, 0, 0, 0, 0, 0, 0], // TODO: Заменить на реальные временные данные
+                                borderColor: '#10b981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                tension: 0.4,
+                                borderWidth: 2,
+                                fill: true
+                            }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 20
+                                }
+                            },
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
+                            }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: true,
+                                grid: {
+                                    drawBorder: false
+                                },
+                                ticks: {
+                                    stepSize: 1
+                                }
+                            },
+                            x: {
+                                grid: {
+                                    display: false
+                                },
+                                ticks: {
+                                    maxRotation: 45
+                                }
+                            }
+                        },
+                        interaction: {
+                            mode: 'nearest',
+                            axis: 'x',
+                            intersect: false
+                        }
+                    }
+                };
+            } else {
+                return {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['Перезвонить', 'На согласовании', 'Приглашен к рекрутеру'],
+                        datasets: [{
+                            data: [data.callback || 0, data.approval || 0, data.invited || 0],
+                            backgroundColor: ['#2563eb', '#f59e0b', '#10b981'],
+                            borderWidth: 0,
+                            hoverOffset: 10,
+                            borderColor: '#ffffff'
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        cutout: '60%',
+                        plugins: {
+                            legend: {
+                                display: true,
+                                position: 'bottom',
+                                labels: {
+                                    usePointStyle: true,
+                                    padding: 20,
+                                    font: {
+                                        size: 12
+                                    }
+                                }
+                            },
+                            tooltip: {
+                                callbacks: {
+                                    label: function(context) {
+                                        return `${context.label}: ${context.raw} лидов`;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                };
+            }
+        }, [type, data.callback, data.approval, data.invited]); // Правильные зависимости
+
         React.useEffect(() => {
-            if (chartRef.current && data) {
+            if (chartRef.current && data && chartConfig) {
                 const ctx = chartRef.current.getContext('2d');
                 
                 if (chartInstance.current) {
                     chartInstance.current.destroy();
                 }
 
-                const config = type === 'line' ? getLineChartConfig() : getDoughnutChartConfig();
-                chartInstance.current = new ChartJS(ctx, config);
+                chartInstance.current = new ChartJS(ctx, chartConfig);
             }
 
             return () => {
@@ -32,95 +153,7 @@ function LeadsChart({ type, data }) {
                     chartInstance.current.destroy();
                 }
             };
-        }, [type, data]);
-
-        const getLineChartConfig = () => ({
-            type: 'line',
-            data: {
-                labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
-                datasets: [
-                    {
-                        label: 'Перезвонить',
-                        data: [12, 19, 15, 25, 22, 18, 24], // TODO: Заменить на реальные данные
-                        borderColor: '#2563eb',
-                        backgroundColor: 'rgba(37, 99, 235, 0.1)',
-                        tension: 0.4,
-                        borderWidth: 2
-                    },
-                    {
-                        label: 'На согласовании',
-                        data: [8, 12, 18, 14, 16, 20, 15], // TODO: Заменить на реальные данные
-                        borderColor: '#f59e0b',
-                        backgroundColor: 'rgba(245, 158, 11, 0.1)',
-                        tension: 0.4,
-                        borderWidth: 2
-                    },
-                    {
-                        label: 'Приглашен к рекрутеру',
-                        data: [5, 8, 6, 12, 10, 14, 18], // TODO: Заменить на реальные данные
-                        borderColor: '#10b981',
-                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
-                        tension: 0.4,
-                        borderWidth: 2
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'bottom',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20
-                        }
-                    }
-                },
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            drawBorder: false
-                        }
-                    },
-                    x: {
-                        grid: {
-                            display: false
-                        }
-                    }
-                }
-            }
-        });
-
-        const getDoughnutChartConfig = () => ({
-            type: 'doughnut',
-            data: {
-                labels: ['Перезвонить', 'На согласовании', 'Приглашен к рекрутеру'],
-                datasets: [{
-                    data: [data.callback || 0, data.approval || 0, data.invited || 0],
-                    backgroundColor: ['#2563eb', '#f59e0b', '#10b981'],
-                    borderWidth: 0,
-                    hoverOffset: 10
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                cutout: '60%',
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'bottom',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20
-                        }
-                    }
-                }
-            }
-        });
+        }, [chartConfig]); // Только одна зависимость
 
         return (
             <div className="h-64" data-name="leads-chart">
@@ -134,6 +167,7 @@ function LeadsChart({ type, data }) {
                 <div className="text-red-500 text-center">
                     <div className="icon-alert-circle text-3xl mb-2"></div>
                     <p>Ошибка загрузки графика</p>
+                    <p className="text-xs mt-1 text-gray-500">Обновите страницу</p>
                 </div>
             </div>
         );
