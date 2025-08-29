@@ -91,6 +91,59 @@ function App() {
                 {/* ... остальной код без изменений ... */}
             </main>
 
+
+// Добавляем в состояние
+const [dateRange, setDateRange] = React.useState({
+    start: new Date(),
+    end: new Date()
+});
+
+// Функция для применения фильтра дат
+const applyDateFilter = (startDate, endDate) => {
+    window.currentStartDate = startDate;
+    window.currentEndDate = endDate;
+    loadDataFromDatabase();
+};
+
+// Компонент для выбора даты
+function DateFilter({ onApply }) {
+    const [startDate, setStartDate] = React.useState(formatDateForInput(new Date()));
+    const [endDate, setEndDate] = React.useState(formatDateForInput(new Date()));
+
+    const handleApply = () => {
+        onApply(new Date(startDate), new Date(endDate));
+    };
+
+    return (
+        <div className="flex items-center gap-4 p-4 bg-white rounded-lg shadow">
+            <div>
+                <label className="block text-sm font-medium mb-1">С</label>
+                <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="p-2 border rounded"
+                />
+            </div>
+            <div>
+                <label className="block text-sm font-medium mb-1">По</label>
+                <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="p-2 border rounded"
+                />
+            </div>
+            <button
+                onClick={handleApply}
+                className="px-4 py-2 bg-blue-500 text-white rounded mt-4"
+            >
+                Применить
+            </button>
+        </div>
+    );
+}
+
             <BitrixConfigModal
                 isOpen={showConfigModal}
                 onClose={() => setShowConfigModal(false)}
