@@ -15,8 +15,8 @@ if (typeof window !== 'undefined' && window.STATUS_MAP) {
 }
 
 const BITRIX_CONFIG = {
-    domain: '',
-    webhook: '',
+    domain: "ers2023.bitrix24.ru",
+    webhook: "1bc1djrnc455xeth",
     userId: ''
 };
 
