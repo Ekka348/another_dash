@@ -64,12 +64,10 @@ async function bitrixApiCall(method, params = {}) {
         throw new Error('Bitrix24 не настроен. Укажите домен и webhook.');
     }
 
-    // ФОРМИРУЕМ ПРАВИЛЬНЫЙ URL - ОБРАТИТЕ ВНИМАНИЕ!
     const url = `https://${BITRIX_CONFIG.domain}/rest/${BITRIX_CONFIG.userId}/${BITRIX_CONFIG.webhook}/${method}.json`;
     
     try {
         console.log('Bitrix API call:', method, params);
-        console.log('Request URL:', url); // ← ДЛЯ ОТЛАДКИ
         
         const response = await fetch(url, {
             method: 'POST',
@@ -97,7 +95,7 @@ async function bitrixApiCall(method, params = {}) {
     }
 }
 
-// Получение лидов из Bitrix24 с фильтрацией по статусам
+// Получение лидов из Bitrix24 с фильтрацией по статусам (С ПАГИНАЦИЕЙ)
 async function fetchBitrixLeads(startDate, endDate) {
     try {
         if (!startDate || !endDate) {
@@ -107,23 +105,50 @@ async function fetchBitrixLeads(startDate, endDate) {
         const startDateStr = formatDateForBitrix(startDate);
         const endDateStr = formatDateForBitrix(endDate);
 
-        // ДОБАВИМ ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ
         console.log('Fetching leads for period:', startDateStr, '-', endDateStr);
         
-        const leads = await bitrixApiCall('crm.lead.list', {
-            select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
-            filter: {
-                'STATUS_ID': Object.keys(STATUS_MAP),
-                '>=DATE_MODIFY': `${startDateStr} 00:00:00`,
-                '<=DATE_MODIFY': `${endDateStr} 23:59:59`
-            },
-            order: { "DATE_MODIFY": "ASC" }
-        });
+        let allLeads = [];
+        let start = 0;
+        const batchSize = 50;
+        let hasMore = true;
+        let totalLoaded = 0;
 
-        console.log(`Loaded ${leads.length} leads from Bitrix24`);
-        console.log('Leads sample:', leads.slice(0, 3)); // ← Первые 3 лида для проверки
+        // Пагинация - получаем данные порциями
+        while (hasMore) {
+            const leads = await bitrixApiCall('crm.lead.list', {
+                select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
+                filter: {
+                    'STATUS_ID': Object.keys(STATUS_MAP),
+                    '>=DATE_MODIFY': `${startDateStr} 00:00:00`,
+                    '<=DATE_MODIFY': `${endDateStr} 23:59:59`
+                },
+                order: { "DATE_MODIFY": "ASC" },
+                start: start
+            });
+
+            if (!leads || leads.length === 0) {
+                hasMore = false;
+                break;
+            }
+
+            allLeads = allLeads.concat(leads);
+            totalLoaded += leads.length;
+            
+            console.log(`Loaded batch of ${leads.length} leads, total: ${totalLoaded}`);
+
+            // Проверяем есть ли еще данные
+            if (leads.length < batchSize) {
+                hasMore = false;
+            } else {
+                start += batchSize;
+                // Небольшая задержка чтобы не превысить лимиты API
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        }
+
+        console.log(`Total loaded ${allLeads.length} leads from Bitrix24`);
         
-        return leads.map(lead => ({
+        return allLeads.map(lead => ({
             ID: lead.ID,
             TITLE: lead.TITLE || `Лид #${lead.ID}`,
             STATUS_ID: lead.STATUS_ID,
@@ -137,19 +162,47 @@ async function fetchBitrixLeads(startDate, endDate) {
     }
 }
 
-// Получение пользователей (операторов) из Bitrix24
+// Получение пользователей (операторов) из Bitrix24 (С ПАГИНАЦИЕЙ)
 async function fetchBitrixUsers() {
     try {
-        const users = await bitrixApiCall('user.get', {
-            filter: {
-                'ACTIVE': true,
-                '!ID': '1' // исключаем администратора
-            },
-            select: ['ID', 'NAME', 'LAST_NAME', 'WORK_DEPARTMENT', 'IS_ONLINE', 'LAST_ACTIVITY_DATE', 'EMAIL']
-        });
+        let allUsers = [];
+        let start = 0;
+        const batchSize = 50;
+        let hasMore = true;
+        let totalLoaded = 0;
 
-        console.log(`Loaded ${users.length} users from Bitrix24`);
-        return users.map(user => ({
+        // Пагинация для пользователей
+        while (hasMore) {
+            const users = await bitrixApiCall('user.get', {
+                filter: {
+                    'ACTIVE': true,
+                    '!ID': '1'
+                },
+                select: ['ID', 'NAME', 'LAST_NAME', 'WORK_DEPARTMENT', 'IS_ONLINE', 'LAST_ACTIVITY_DATE', 'EMAIL'],
+                start: start
+            });
+
+            if (!users || users.length === 0) {
+                hasMore = false;
+                break;
+            }
+
+            allUsers = allUsers.concat(users);
+            totalLoaded += users.length;
+            
+            console.log(`Loaded batch of ${users.length} users, total: ${totalLoaded}`);
+
+            if (users.length < batchSize) {
+                hasMore = false;
+            } else {
+                start += batchSize;
+                await new Promise(resolve => setTimeout(resolve, 50));
+            }
+        }
+
+        console.log(`Total loaded ${allUsers.length} users from Bitrix24`);
+        
+        return allUsers.map(user => ({
             ID: user.ID,
             NAME: user.NAME || '',
             LAST_NAME: user.LAST_NAME || '',
@@ -203,7 +256,7 @@ function formatDateTimeDisplay(date) {
     }
 }
 
-// Экспорт функций для использования в других модулей
+// Экспорт функций для использования в других модулях
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         setBitrixConfig,
