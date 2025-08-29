@@ -7,11 +7,16 @@
     <meta name="description" content="Дашборд для отслеживания лидов в стадиях Перезвонить, На согласовании, Приглашен к рекрутеру">
     <meta name="keywords" content="битрикс24, лиды, дашборд, аналитика, crm">
     
+    <!-- React и зависимости -->
     <script src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
     <script src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Стили -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+    
+    <!-- Chart.js для графиков -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
 
     <style type="text/tailwindcss">
@@ -58,19 +63,31 @@
 </head>
 <body>
     <div id="root"></div>
+    
+    <!-- Делаем Chart.js глобально доступным -->
     <script>const ChartJS = window.Chart;</script>
     
     <!-- Подключение скриптов в правильном порядке -->
+    
+    <!-- 1. Конфигурация и константы -->
     <script type="text/babel" src="config.js"></script>
+    
+    <!-- 2. API для работы с Bitrix24 -->
     <script type="text/babel" src="bitrixApi.js"></script>
+    
+    <!-- 3. Синхронизация данных -->
     <script type="text/babel" src="dataSync.js"></script>
-    <script type="text/babel" src="mockData.js"></script>
+    
+    <!-- 4. Компоненты интерфейса -->
     <script type="text/babel" src="components/MetricCard.js"></script>
     <script type="text/babel" src="components/LeadsChart.js"></script>
     <script type="text/babel" src="components/OperatorTable.js"></script>
     <script type="text/babel" src="components/SyncStatus.js"></script>
     <script type="text/babel" src="components/BitrixConfigModal.js"></script>
     <script type="text/babel" src="components/DateFilter.js"></script>
+    
+    <!-- 5. Главное приложение -->
     <script type="text/babel" src="app.js"></script>
+
 </body>
 </html>
