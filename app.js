@@ -39,8 +39,8 @@ class ErrorBoundary extends React.Component {
 
 function App() {
     const [selectedStage, setSelectedStage] = React.useState('all');
-    const [leadsData, setLeadsData] = React.useState(mockLeadsData);
-    const [operatorsData, setOperatorsData] = React.useState(mockOperatorsData);
+    const [leadsData, setLeadsData] = React.useState({ callback: 0, approval: 0, invited: 0 });
+    const [operatorsData, setOperatorsData] = React.useState({ callback: [], approval: [], invited: [] });
     const [isLoading, setIsLoading] = React.useState(false);
     const [lastSync, setLastSync] = React.useState(null);
     const [showConfigModal, setShowConfigModal] = React.useState(false);
@@ -55,7 +55,7 @@ function App() {
 
     // Проверяем настройку Bitrix24 при загрузке
     React.useEffect(() => {
-        const configured = loadBitrixConfig() && isBitrixConfigured();
+        const configured = loadBitrixConfig && isBitrixConfigured && loadBitrixConfig() && isBitrixConfigured();
         setUsingMockData(!configured);
         loadDataFromDatabase();
     }, []);
@@ -64,12 +64,17 @@ function App() {
         try {
             setIsLoading(true);
             setSyncError(null);
+            
+            if (typeof syncWithBitrix24 === 'undefined') {
+                throw new Error('Функции синхронизации не загружены');
+            }
+            
             const dbData = await syncWithBitrix24();
             
-            setLeadsData(dbData.leadsCount);
-            setOperatorsData(dbData.operatorsByStage);
+            setLeadsData(dbData.leadsCount || { callback: 0, approval: 0, invited: 0 });
+            setOperatorsData(dbData.operatorsByStage || { callback: [], approval: [], invited: [] });
             setLastSync(dbData.lastSync);
-            setUsingMockData(dbData.usingMockData);
+            setUsingMockData(dbData.usingMockData || true);
             
             if (dbData.error) {
                 setSyncError(dbData.error);
@@ -79,6 +84,10 @@ function App() {
             console.error('Error loading data:', error);
             setSyncError(error.message);
             setUsingMockData(true);
+            
+            // Устанавливаем пустые данные при ошибке
+            setLeadsData({ callback: 0, approval: 0, invited: 0 });
+            setOperatorsData({ callback: [], approval: [], invited: [] });
         } finally {
             setIsLoading(false);
         }
@@ -168,21 +177,21 @@ function App() {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <MetricCard 
                         title="Перезвонить"
-                        value={leadsData.callback}
+                        value={leadsData.callback || 0}
                         icon="phone"
                         color="blue"
                         trend={+12}
                     />
                     <MetricCard 
                         title="На согласовании"
-                        value={leadsData.approval}
+                        value={leadsData.approval || 0}
                         icon="clock"
                         color="yellow"
                         trend={-3}
                     />
                     <MetricCard 
                         title="Приглашен к рекрутеру"
-                        value={leadsData.invited}
+                        value={leadsData.invited || 0}
                         icon="user-check"
                         color="green"
                         trend={+8}
