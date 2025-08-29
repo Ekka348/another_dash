@@ -1,5 +1,11 @@
 {
   "name": "bitrix24-dashboard",
   "version": "1.0.0",
-  "description": "Дашборд лидов Битрикс24"
+  "description": "Дашборд лидов Битрикс24",
+  "scripts": {
+    "start": "echo 'Static site - no server needed' && sleep infinity"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }
