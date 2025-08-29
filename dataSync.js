@@ -1,16 +1,36 @@
 // Синхронизация данных между Bitrix24 и приложением
+
+// Проверяем доступность зависимостей
+if (typeof fetchBitrixUsers === 'undefined') {
+    console.error('Ошибка: fetchBitrixUsers не определен');
+}
+if (typeof fetchBitrixLeads === 'undefined') {
+    console.error('Ошибка: fetchBitrixLeads не определен');
+}
+if (typeof loadBitrixConfig === 'undefined') {
+    console.error('Ошибка: loadBitrixConfig не определен');
+}
+if (typeof isBitrixConfigured === 'undefined') {
+    console.error('Ошибка: isBitrixConfigured не определен');
+}
+
+// Базовые структуры для пустых данных
+const EMPTY_LEADS_COUNT = { callback: 0, approval: 0, invited: 0 };
+const EMPTY_OPERATORS_BY_STAGE = { callback: [], approval: [], invited: [] };
+
 async function syncWithBitrix24() {
     try {
         // Проверяем конфигурацию Bitrix24
         if (!loadBitrixConfig() || !isBitrixConfigured()) {
-            console.warn('Bitrix24 не настроен, используются моковые данные');
+            console.warn('Bitrix24 не настроен, используются пустые данные');
             return {
                 leads: [],
                 operators: [],
-                leadsCount: mockLeadsData,
-                operatorsByStage: mockOperatorsData,
+                leadsCount: EMPTY_LEADS_COUNT,
+                operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
                 lastSync: null,
-                usingMockData: true
+                usingMockData: true,
+                error: 'Bitrix24 не настроен'
             };
         }
 
@@ -40,27 +60,30 @@ async function syncWithBitrix24() {
 
     } catch (error) {
         console.error('Ошибка синхронизации с Bitrix24:', error);
-        // Возвращаем моковые данные в случае ошибки
+        // Возвращаем пустые данные в случае ошибки
         return {
             leads: [],
             operators: [],
-            leadsCount: mockLeadsData,
-            operatorsByStage: mockOperatorsData,
+            leadsCount: EMPTY_LEADS_COUNT,
+            operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
             lastSync: null,
             usingMockData: true,
-            error: error.message
+            error: error.message,
+            errorType: error.name
         };
     }
 }
 
 // Обработка данных лидов для дашборда
 function processLeadsData(leads, operators) {
-    // Подсчет лидов по стадиям
-    const leadsCount = {
-        callback: leads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-        approval: leads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-        invited: leads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-    };
+    // Подсчет лидов по стадиям с использованием reduce
+    const leadsCount = leads.reduce((acc, lead) => {
+        const stage = mapStatusToStage(lead.STATUS_ID);
+        if (acc[stage] !== undefined) {
+            acc[stage]++;
+        }
+        return acc;
+    }, { callback: 0, approval: 0, invited: 0 });
 
     // Группировка операторов по стадиям
     const operatorsByStage = {
@@ -74,8 +97,8 @@ function processLeadsData(leads, operators) {
     operators.forEach(op => {
         operatorsMap[op.ID] = {
             id: op.ID,
-            name: op.FULL_NAME,
-            department: op.DEPARTMENT,
+            name: op.FULL_NAME || `Оператор #${op.ID}`,
+            department: op.DEPARTMENT || 'Не указан',
             status: op.IS_ONLINE ? 'active' : 'offline',
             lastActivity: formatRelativeTime(op.LAST_ACTIVITY_DATE || new Date().toISOString())
         };
@@ -94,7 +117,9 @@ function processLeadsData(leads, operators) {
             operatorLeadsCount[operatorId] = { callback: 0, approval: 0, invited: 0 };
         }
         
-        operatorLeadsCount[operatorId][stage]++;
+        if (operatorLeadsCount[operatorId][stage] !== undefined) {
+            operatorLeadsCount[operatorId][stage]++;
+        }
     });
 
     // Формируем данные для таблиц
@@ -103,11 +128,11 @@ function processLeadsData(leads, operators) {
         const counts = operatorLeadsCount[operatorId];
         
         Object.keys(counts).forEach(stage => {
-            if (counts[stage] > 0) {
+            if (counts[stage] > 0 && operatorsByStage[stage]) {
                 operatorsByStage[stage].push({
                     ...operatorData,
                     leads: counts[stage],
-                    trend: calculateTrend(counts[stage]) // Генерируем тренд
+                    trend: calculateTrend(counts[stage])
                 });
             }
         });
@@ -115,7 +140,9 @@ function processLeadsData(leads, operators) {
 
     // Сортируем операторов по количеству лидов
     Object.keys(operatorsByStage).forEach(stage => {
-        operatorsByStage[stage].sort((a, b) => b.leads - a.leads);
+        if (operatorsByStage[stage]) {
+            operatorsByStage[stage].sort((a, b) => b.leads - a.leads);
+        }
     });
 
     return {
@@ -136,9 +163,8 @@ function mapStatusToStage(statusId) {
     return mapping[statusId] || 'callback';
 }
 
-// Расчет тренда (для демонстрации)
+// Расчет тренда
 function calculateTrend(leadsCount) {
-    // Простая логика для демонстрации
     if (leadsCount === 0) return 0;
     const base = Math.floor(Math.random() * 5) + 1;
     return Math.random() > 0.5 ? base : -base;
@@ -165,7 +191,26 @@ function formatRelativeTime(dateString) {
 
 // Функция для применения фильтра дат
 function applyDateFilter(startDate, endDate) {
+    if (!startDate || !endDate) {
+        console.error('Не указаны даты для фильтра');
+        return Promise.reject(new Error('Не указаны даты для фильтра'));
+    }
+    
     window.currentStartDate = startDate;
     window.currentEndDate = endDate;
     return syncWithBitrix24();
+}
+
+// Экспорт функций для использования в других модулях
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        syncWithBitrix24,
+        processLeadsData,
+        mapStatusToStage,
+        calculateTrend,
+        formatRelativeTime,
+        applyDateFilter,
+        EMPTY_LEADS_COUNT,
+        EMPTY_OPERATORS_BY_STAGE
+    };
 }
