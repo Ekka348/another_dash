@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "Дашборд лидов Битрикс24",
   "scripts": {
-    "start": "npx serve -s -l 3000"
+    "start": "npx serve -s -l $PORT"
   },
   "dependencies": {
     "serve": "^14.2.1"
