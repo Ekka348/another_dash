@@ -1,4 +1,4 @@
-// config.js
+// Конфигурационные константы
 const STATUS_MAP = {
     'IN_PROCESS': 'Перезвонить',
     'CONVERTED': 'Приглашен к рекрутеру', 
@@ -7,7 +7,7 @@ const STATUS_MAP = {
 
 const STATUS_COLORS = {
     'Перезвонить': '#4ecdc4',
-    'Приглашен к рекрутеру': '#45b7d1',
+    'Приглашен к рекрутеру': '#45b7d1', 
     'На согласовании': '#96ceb4'
 };
 
@@ -16,3 +16,8 @@ const TIME_SLOTS = [
     '12:00-13:00', '13:00-14:00', '14:00-15:00', '15:00-16:00',
     '16:00-17:00', '17:00-18:00', '18:00-19:00', '19:00-20:00'
 ];
+
+// Глобальные переменные для хранения данных
+window.currentStartDate = new Date();
+window.currentEndDate = new Date();
+window.bitrixConfigured = false;
