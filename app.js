@@ -198,15 +198,24 @@ function App() {
                     />
                 </div>
 
-                {/* Charts Section */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-                    <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Динамика лидов по дням</h3>
-                        <LeadsChart type="line" data={leadsData} />
+                {/* Simple Statistics Section - ВМЕСТО ГРАФИКОВ */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    <div className="dashboard-card text-center">
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить</h3>
+                        <div className="text-4xl font-bold text-blue-600 py-6">{leadsData.callback || 0}</div>
+                        <p className="text-gray-600">лидов</p>
                     </div>
-                    <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Распределение по стадиям</h3>
-                        <LeadsChart type="doughnut" data={leadsData} />
+                    
+                    <div className="dashboard-card text-center">
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">⏳ На согласовании</h3>
+                        <div className="text-4xl font-bold text-yellow-600 py-6">{leadsData.approval || 0}</div>
+                        <p className="text-gray-600">лидов</p>
+                    </div>
+                    
+                    <div className="dashboard-card text-center">
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">✅ Приглашены</h3>
+                        <div className="text-4xl font-bold text-green-600 py-6">{leadsData.invited || 0}</div>
+                        <p className="text-gray-600">лидов</p>
                     </div>
                 </div>
 
