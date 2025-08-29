@@ -64,7 +64,7 @@ async function bitrixApiCall(method, params = {}) {
         throw new Error('Bitrix24 не настроен. Укажите домен и webhook.');
     }
 
-    const url = `https://${BITRIX_CONFIG.domain}/rest/${BITRIX_CONFIG.webhook}/${method}`;
+    const url = `https://${BITRIX_CONFIG.domain}/rest/${BITRIX_CONFIG.userId}/${BITRIX_CONFIG.webhook}/${method}.json`;
     
     try {
         console.log('Bitrix API call:', method, params);
