@@ -15,8 +15,8 @@ if (typeof window !== 'undefined' && window.STATUS_MAP) {
 }
 
 const BITRIX_CONFIG = {
-    domain: "ers2023.bitrix24.ru",
-    webhook: "1bc1djrnc455xeth",
+    domain: '',
+    webhook: '',
     userId: ''
 };
 
@@ -32,7 +32,7 @@ function setBitrixConfig(domain, webhook, userId) {
     
     localStorage.setItem('bitrix_config', JSON.stringify(BITRIX_CONFIG));
     window.bitrixConfigured = true;
-    console.log('Bitrix24 config saved:', BITRIX_CONFIG.domain);
+    console.log('Bitrix24 config saved:', BITRIX_CONFIG);
 }
 
 // Загрузка конфигурации из localStorage
@@ -43,7 +43,7 @@ function loadBitrixConfig() {
             const config = JSON.parse(saved);
             Object.assign(BITRIX_CONFIG, config);
             window.bitrixConfigured = true;
-            console.log('Bitrix24 config loaded:', BITRIX_CONFIG.domain);
+            console.log('Bitrix24 config loaded:', BITRIX_CONFIG);
             return true;
         }
     } catch (error) {
@@ -64,10 +64,13 @@ async function bitrixApiCall(method, params = {}) {
         throw new Error('Bitrix24 не настроен. Укажите домен и webhook.');
     }
 
+    // ФОРМИРУЕМ ПРАВИЛЬНЫЙ URL - ОБРАТИТЕ ВНИМАНИЕ!
     const url = `https://${BITRIX_CONFIG.domain}/rest/${BITRIX_CONFIG.userId}/${BITRIX_CONFIG.webhook}/${method}.json`;
     
     try {
         console.log('Bitrix API call:', method, params);
+        console.log('Request URL:', url); // ← ДЛЯ ОТЛАДКИ
+        
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -104,6 +107,9 @@ async function fetchBitrixLeads(startDate, endDate) {
         const startDateStr = formatDateForBitrix(startDate);
         const endDateStr = formatDateForBitrix(endDate);
 
+        // ДОБАВИМ ЛОГИРОВАНИЕ ДЛЯ ОТЛАДКИ
+        console.log('Fetching leads for period:', startDateStr, '-', endDateStr);
+        
         const leads = await bitrixApiCall('crm.lead.list', {
             select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
             filter: {
@@ -115,6 +121,8 @@ async function fetchBitrixLeads(startDate, endDate) {
         });
 
         console.log(`Loaded ${leads.length} leads from Bitrix24`);
+        console.log('Leads sample:', leads.slice(0, 3)); // ← Первые 3 лида для проверки
+        
         return leads.map(lead => ({
             ID: lead.ID,
             TITLE: lead.TITLE || `Лид #${lead.ID}`,
@@ -195,7 +203,7 @@ function formatDateTimeDisplay(date) {
     }
 }
 
-// Экспорт функций для использования в других модулях
+// Экспорт функций для использования в других модулей
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         setBitrixConfig,
