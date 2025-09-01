@@ -7,6 +7,9 @@ if (typeof fetchBitrixUsers === 'undefined') {
 if (typeof fetchBitrixLeads === 'undefined') {
     console.error('Ошибка: fetchBitrixLeads не определен');
 }
+if (typeof fetchBitrixLeadsByDay === 'undefined') {
+    console.error('Ошибка: fetchBitrixLeadsByDay не определен');
+}
 if (typeof loadBitrixConfig === 'undefined') {
     console.error('Ошибка: loadBitrixConfig не определен');
 }
@@ -28,6 +31,7 @@ async function syncWithBitrix24() {
                 operators: [],
                 leadsCount: EMPTY_LEADS_COUNT,
                 operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
+                weeklyLeads: {},
                 lastSync: null,
                 usingMockData: true,
                 error: 'Bitrix24 не настроен'
@@ -49,12 +53,18 @@ async function syncWithBitrix24() {
         const leads = await fetchBitrixLeads(startDate, endDate);
         console.log('Загружено лидов:', leads.length);
 
+        // Получаем данные за текущую неделю для графиков
+        const weeklyLeads = await fetchWeeklyLeadsData();
+        console.log('Загружены данные за неделю:', weeklyLeads);
+
         // Обрабатываем данные для дашборда
         const processedData = processLeadsData(leads, operators);
 
         return {
             ...processedData,
+            weeklyLeads,
             lastSync: new Date().toISOString(),
+            usingMockData: false
         };
 
     } catch (error) {
@@ -65,11 +75,34 @@ async function syncWithBitrix24() {
             operators: [],
             leadsCount: EMPTY_LEADS_COUNT,
             operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
+            weeklyLeads: {},
             lastSync: null,
             usingMockData: true,
             error: error.message,
             errorType: error.name
         };
+    }
+}
+
+// Получение данных за текущую неделю
+async function fetchWeeklyLeadsData() {
+    try {
+        // Определяем даты начала и конца текущей недели
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
+        startOfWeek.setHours(0, 0, 0, 0);
+        
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6); // Воскресенье
+        endOfWeek.setHours(23, 59, 59, 999);
+        
+        // Получаем данные за неделю
+        const weeklyLeads = await fetchBitrixLeadsByDay(startOfWeek, endOfWeek);
+        return weeklyLeads;
+    } catch (error) {
+        console.error('Ошибка получения данных за неделю:', error);
+        return {};
     }
 }
 
