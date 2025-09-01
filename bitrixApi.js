@@ -162,12 +162,19 @@ async function fetchBitrixLeads(startDate, endDate) {
     }
 }
 
-// Получение лидов по дням недели (группировка по DATE_MODIFY)
+// Получение лидов по дням недели (все лиды в статусе "Перезвонить" на каждый день)
 async function fetchBitrixLeadsByDay(startDate, endDate) {
     try {
-        const leads = await fetchBitrixLeads(startDate, endDate);
-        
-        // Группируем лиды по дням изменения (DATE_MODIFY) и статусам
+        // Получаем ВСЕ лиды в статусе "Перезвонить", независимо от даты создания/изменения
+        const leads = await bitrixApiCall('crm.lead.list', {
+            select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
+            filter: {
+                'STATUS_ID': 'IN_PROCESS' // Только лиды в статусе "Перезвонить"
+            },
+            order: { "DATE_CREATE": "ASC" }
+        });
+
+        // Группируем лиды по дням изменения (DATE_MODIFY)
         const leadsByDay = {};
         const currentWeekDays = getCurrentWeekDays();
         
@@ -188,8 +195,7 @@ async function fetchBitrixLeadsByDay(startDate, endDate) {
             const dayKey = formatDateForBitrix(modifyDate);
             
             if (leadsByDay[dayKey]) {
-                const status = mapStatusToStage(lead.STATUS_ID);
-                leadsByDay[dayKey][status]++;
+                leadsByDay[dayKey].callback++; // Увеличиваем счетчик для дня
             }
         });
         
