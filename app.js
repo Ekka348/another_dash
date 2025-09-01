@@ -225,44 +225,45 @@ function App() {
                     />
                 </div>
 
-                {/* Charts Section - ГРАФИКИ ПО СТАДИЯМ */}
-<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-    {/* График для Перезвонить */}
-    <div className="dashboard-card">
-        <h3 className="text-lg font-semibold mb-4 text-gray-900">График за текущую неделю</h3>
-        <LeadsChart 
-            type="line" 
-            data={weeklyLeads.callback || Array(7).fill(0)}
-            labels={getWeekDayLabels()}
-            color="#2563eb"
-            title="Перезвонить"
-        />
-    </div>
-    
-    {/* График для На согласовании */}
-    <div className="dashboard-card">
-        <h3 className="text-lg font-semibold mb-4 text-gray-900">График за текущую неделю</h3>
-        <LeadsChart 
-            type="line" 
-            data={weeklyLeads.approval || Array(7).fill(0)}
-            labels={getWeekDayLabels()}
-            color="#f59e0b"
-            title="На согласовании"
-        />
-    </div>
-    
-    {/* График для Приглашены */}
-    <div className="dashboard-card">
-        <h3 className="text-lg font-semibold mb-4 text-gray-900">График за текущую неделю</h3>
-        <LeadsChart 
-            type="line" 
-            data={weeklyLeads.invited || Array(7).fill(0)}
-            labels={getWeekDayLabels()}
-            color="#10b981"
-            title="Приглашен к рекрутеру"
-        />
-    </div>
-</div>
+                {/* Общий контейнер для графиков */}
+                <div className="dashboard-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* График для Перезвонить */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={weeklyLeads.callback || Array(7).fill(0)}
+                                labels={getWeekDayLabels()}
+                                color="#2563eb"
+                                title="Перезвонить"
+                            />
+                        </div>
+                        
+                        {/* График для На согласовании */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={weeklyLeads.approval || Array(7).fill(0)}
+                                labels={getWeekDayLabels()}
+                                color="#f59e0b"
+                                title="На согласовании"
+                            />
+                        </div>
+                        
+                        {/* График для Приглашены */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={weeklyLeads.invited || Array(7).fill(0)}
+                                labels={getWeekDayLabels()}
+                                color="#10b981"
+                                title="Приглашен к рекрутеру"
+                            />
+                        </div>
+                    </div>
+                </div>
 
                 {/* Stage Filter */}
                 <div className="mb-6">
