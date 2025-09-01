@@ -55,7 +55,6 @@ function App() {
     // Проверяем настройку Bitrix24 при загрузке
     React.useEffect(() => {
         const configured = loadBitrixConfig && isBitrixConfigured && loadBitrixConfig() && isBitrixConfigured();
-        setUsingMockData(!configured);
         loadDataFromDatabase();
     }, []);
 
@@ -73,7 +72,6 @@ function App() {
             setLeadsData(dbData.leadsCount || { callback: 0, approval: 0, invited: 0 });
             setOperatorsData(dbData.operatorsByStage || { callback: [], approval: [], invited: [] });
             setLastSync(dbData.lastSync);
-            setUsingMockData(dbData.usingMockData || true);
             
             if (dbData.error) {
                 setSyncError(dbData.error);
@@ -82,7 +80,6 @@ function App() {
         } catch (error) {
             console.error('Error loading data:', error);
             setSyncError(error.message);
-            setUsingMockData(true);
             
             // Устанавливаем пустые данные при ошибке
             setLeadsData({ callback: 0, approval: 0, invited: 0 });
