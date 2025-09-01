@@ -54,7 +54,7 @@ function App() {
 
     // Проверяем настройку Bitrix24 при загрузке
     React.useEffect(() => {
-        const configured = loadBitrixConfig && isBitrixConfigured && loadBitrixConfig() && isBitrixConfigured();
+        loadBitrixConfig();
         loadDataFromDatabase();
     }, []);
 
@@ -102,7 +102,6 @@ function App() {
     };
 
     const handleConfigSave = () => {
-        setUsingMockData(false);
         loadDataFromDatabase();
     };
 
@@ -135,6 +134,13 @@ function App() {
                         </div>
                         
                         <div className="flex items-center gap-4 flex-wrap">
+                            <button
+                                onClick={() => setShowConfigModal(true)}
+                                className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors flex items-center gap-2"
+                            >
+                                <div className="icon-settings text-sm"></div>
+                                Настроить Bitrix24
+                            </button>
                             
                             <SyncStatus 
                                 lastSync={lastSync} 
@@ -184,24 +190,42 @@ function App() {
                     />
                 </div>
 
-                {/* Simple Statistics Section - ВМЕСТО ГРАФИКОВ */}
+                {/* Charts Section - ГРАФИКИ ПО СТАДИЯМ */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                    <div className="dashboard-card text-center">
+                    <div className="dashboard-card">
                         <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить</h3>
-                        <div className="text-4xl font-bold text-blue-600 py-6">{leadsData.callback || 0}</div>
-                        <p className="text-gray-600">лидов</p>
+                        <LeadsChart 
+                            type="doughnut" 
+                            data={{ callback: leadsData.callback || 0, approval: 0, invited: 0 }}
+                        />
+                        <div className="text-center mt-2">
+                            <p className="text-2xl font-bold text-blue-600">{leadsData.callback || 0}</p>
+                            <p className="text-sm text-gray-600">лидов</p>
+                        </div>
                     </div>
                     
-                    <div className="dashboard-card text-center">
+                    <div className="dashboard-card">
                         <h3 className="text-lg font-semibold mb-4 text-gray-900">⏳ На согласовании</h3>
-                        <div className="text-4xl font-bold text-yellow-600 py-6">{leadsData.approval || 0}</div>
-                        <p className="text-gray-600">лидов</p>
+                        <LeadsChart 
+                            type="doughnut" 
+                            data={{ callback: 0, approval: leadsData.approval || 0, invited: 0 }}
+                        />
+                        <div className="text-center mt-2">
+                            <p className="text-2xl font-bold text-yellow-600">{leadsData.approval || 0}</p>
+                            <p className="text-sm text-gray-600">лидов</p>
+                        </div>
                     </div>
                     
-                    <div className="dashboard-card text-center">
+                    <div className="dashboard-card">
                         <h3 className="text-lg font-semibold mb-4 text-gray-900">✅ Приглашены</h3>
-                        <div className="text-4xl font-bold text-green-600 py-6">{leadsData.invited || 0}</div>
-                        <p className="text-gray-600">лидов</p>
+                        <LeadsChart 
+                            type="doughnut" 
+                            data={{ callback: 0, approval: 0, invited: leadsData.invited || 0 }}
+                        />
+                        <div className="text-center mt-2">
+                            <p className="text-2xl font-bold text-green-600">{leadsData.invited || 0}</p>
+                            <p className="text-sm text-gray-600">лидов</p>
+                        </div>
                     </div>
                 </div>
 
