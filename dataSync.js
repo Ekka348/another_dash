@@ -233,6 +233,30 @@ function applyDateFilter(startDate, endDate) {
     return syncWithBitrix24();
 }
 
+// Получение всех лидов в статусе "Перезвонить" (без фильтра по дате)
+async function fetchAllCallbackLeads() {
+    try {
+        const leads = await bitrixApiCall('crm.lead.list', {
+            select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
+            filter: {
+                'STATUS_ID': 'IN_PROCESS' // Только лиды в статусе "Перезвонить"
+            }
+        });
+
+        return leads.map(lead => ({
+            ID: lead.ID,
+            TITLE: lead.TITLE || `Лид #${lead.ID}`,
+            STATUS_ID: lead.STATUS_ID,
+            ASSIGNED_BY_ID: lead.ASSIGNED_BY_ID,
+            DATE_MODIFY: lead.DATE_MODIFY,
+            DATE_CREATE: lead.DATE_CREATE
+        }));
+    } catch (error) {
+        console.error('Error fetching callback leads:', error);
+        return [];
+    }
+}
+
 // Экспорт функций для использования в других модулях
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
