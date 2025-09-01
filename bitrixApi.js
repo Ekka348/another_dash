@@ -162,12 +162,12 @@ async function fetchBitrixLeads(startDate, endDate) {
     }
 }
 
-// Получение лидов по дням недели
+// Получение лидов по дням недели (группировка по DATE_MODIFY)
 async function fetchBitrixLeadsByDay(startDate, endDate) {
     try {
         const leads = await fetchBitrixLeads(startDate, endDate);
         
-        // Группируем лиды по дням и статусам
+        // Группируем лиды по дням изменения (DATE_MODIFY) и статусам
         const leadsByDay = {};
         const currentWeekDays = getCurrentWeekDays();
         
@@ -180,10 +180,12 @@ async function fetchBitrixLeadsByDay(startDate, endDate) {
             };
         });
         
-        // Заполняем данными
+        // Заполняем данными по дате изменения
         leads.forEach(lead => {
-            const leadDate = new Date(lead.DATE_CREATE);
-            const dayKey = formatDateForBitrix(leadDate);
+            if (!lead.DATE_MODIFY) return;
+            
+            const modifyDate = new Date(lead.DATE_MODIFY);
+            const dayKey = formatDateForBitrix(modifyDate);
             
             if (leadsByDay[dayKey]) {
                 const status = mapStatusToStage(lead.STATUS_ID);
