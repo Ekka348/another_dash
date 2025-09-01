@@ -26,6 +26,7 @@ function setBitrixConfig(domain, webhook, userId) {
         throw new Error('Домен и webhook обязательны для настройки');
     }
     
+    // Очищаем домен от протокола и слешей
     BITRIX_CONFIG.domain = domain.replace(/https?:\/\//, '').replace(/\/$/, '');
     BITRIX_CONFIG.webhook = webhook.trim();
     BITRIX_CONFIG.userId = userId ? userId.toString() : '';
@@ -64,10 +65,11 @@ async function bitrixApiCall(method, params = {}) {
         throw new Error('Bitrix24 не настроен. Укажите домен и webhook.');
     }
 
-    const url = `https://${BITRIX_CONFIG.domain}/rest/${BITRIX_CONFIG.userId}/${BITRIX_CONFIG.webhook}/${method}.json`;
+    // ИСПРАВЛЕННЫЙ URL - убрал userId из пути вебхука
+    const url = `https://${BITRIX_CONFIG.domain}/rest/${BITRIX_CONFIG.webhook}/${method}`;
     
     try {
-        console.log('Bitrix API call:', method, params);
+        console.log('Bitrix API call:', method, 'URL:', url);
         
         const response = await fetch(url, {
             method: 'POST',
@@ -78,7 +80,8 @@ async function bitrixApiCall(method, params = {}) {
         });
 
         if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
+            const errorText = await response.text();
+            throw new Error(`HTTP error! status: ${response.status}, response: ${errorText}`);
         }
 
         const data = await response.json();
@@ -111,7 +114,6 @@ async function fetchBitrixLeads(startDate, endDate) {
         let start = 0;
         const batchSize = 50;
         let hasMore = true;
-        let totalLoaded = 0;
 
         // Пагинация - получаем данные порциями
         while (hasMore) {
@@ -132,9 +134,8 @@ async function fetchBitrixLeads(startDate, endDate) {
             }
 
             allLeads = allLeads.concat(leads);
-            totalLoaded += leads.length;
             
-            console.log(`Loaded batch of ${leads.length} leads, total: ${totalLoaded}`);
+            console.log(`Loaded batch of ${leads.length} leads, total: ${allLeads.length}`);
 
             // Проверяем есть ли еще данные
             if (leads.length < batchSize) {
@@ -142,7 +143,7 @@ async function fetchBitrixLeads(startDate, endDate) {
             } else {
                 start += batchSize;
                 // Небольшая задержка чтобы не превысить лимиты API
-                await new Promise(resolve => setTimeout(resolve, 50));
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
 
@@ -169,14 +170,13 @@ async function fetchBitrixUsers() {
         let start = 0;
         const batchSize = 50;
         let hasMore = true;
-        let totalLoaded = 0;
 
         // Пагинация для пользователей
         while (hasMore) {
             const users = await bitrixApiCall('user.get', {
                 filter: {
                     'ACTIVE': true,
-                    '!ID': '1'
+                    '!ID': '1' // исключаем системного пользователя
                 },
                 select: ['ID', 'NAME', 'LAST_NAME', 'WORK_DEPARTMENT', 'IS_ONLINE', 'LAST_ACTIVITY_DATE', 'EMAIL'],
                 start: start
@@ -188,15 +188,14 @@ async function fetchBitrixUsers() {
             }
 
             allUsers = allUsers.concat(users);
-            totalLoaded += users.length;
             
-            console.log(`Loaded batch of ${users.length} users, total: ${totalLoaded}`);
+            console.log(`Loaded batch of ${users.length} users, total: ${allUsers.length}`);
 
             if (users.length < batchSize) {
                 hasMore = false;
             } else {
                 start += batchSize;
-                await new Promise(resolve => setTimeout(resolve, 50));
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
 
@@ -208,7 +207,7 @@ async function fetchBitrixUsers() {
             LAST_NAME: user.LAST_NAME || '',
             FULL_NAME: `${user.NAME || ''} ${user.LAST_NAME || ''}`.trim() || `User #${user.ID}`,
             DEPARTMENT: user.WORK_DEPARTMENT || 'Не указан',
-            IS_ONLINE: user.IS_ONLINE === 'Y',
+            IS_ONLINE: user.IS_ONLINE === true || user.IS_ONLINE === 'true' || user.IS_ONLINE === 'Y',
             LAST_ACTIVITY_DATE: user.LAST_ACTIVITY_DATE,
             EMAIL: user.EMAIL || ''
         }));
@@ -256,8 +255,44 @@ function formatDateTimeDisplay(date) {
     }
 }
 
+// Дополнительные методы API для расширения функциональности
+async function fetchLeadStatuses() {
+    try {
+        return await bitrixApiCall('crm.status.list', {
+            filter: { 'ENTITY_ID': 'STATUS' }
+        });
+    } catch (error) {
+        console.error('Error fetching statuses:', error);
+        return [];
+    }
+}
+
+async function updateLeadStatus(leadId, statusId) {
+    try {
+        return await bitrixApiCall('crm.lead.update', {
+            id: leadId,
+            fields: { 'STATUS_ID': statusId }
+        });
+    } catch (error) {
+        console.error('Error updating lead status:', error);
+        throw error;
+    }
+}
+
 // Экспорт функций для использования в других модулях
+if (typeof window !== 'undefined') {
+    // В браузере - делаем функции глобальными
+    window.setBitrixConfig = setBitrixConfig;
+    window.loadBitrixConfig = loadBitrixConfig;
+    window.isBitrixConfigured = isBitrixConfigured;
+    window.bitrixApiCall = bitrixApiCall;
+    window.fetchBitrixLeads = fetchBitrixLeads;
+    window.fetchBitrixUsers = fetchBitrixUsers;
+    window.formatDateForBitrix = formatDateForBitrix;
+}
+
 if (typeof module !== 'undefined' && module.exports) {
+    // Для Node.js
     module.exports = {
         setBitrixConfig,
         loadBitrixConfig,
@@ -265,8 +300,11 @@ if (typeof module !== 'undefined' && module.exports) {
         bitrixApiCall,
         fetchBitrixLeads,
         fetchBitrixUsers,
+        fetchLeadStatuses,
+        updateLeadStatus,
         formatDateForBitrix,
         formatDateForInput,
-        formatDateTimeDisplay
+        formatDateTimeDisplay,
+        BITRIX_CONFIG
     };
 }
