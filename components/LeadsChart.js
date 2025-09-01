@@ -1,11 +1,9 @@
-function LeadsChart({ type, data, labels, showLegend = true }) {
+function LeadsChart({ type, data, labels, color, title }) {
     const chartRef = React.useRef(null);
     const chartInstance = React.useRef(null);
 
     // Проверка на пустые данные
-    const isEmptyData = !data || 
-        (type === 'line' && (!data.callback || data.callback.every(val => val === 0))) ||
-        (type === 'doughnut' && data.callback === 0 && data.approval === 0 && data.invited === 0);
+    const isEmptyData = !data || data.length === 0 || data.every(val => val === 0);
 
     React.useEffect(() => {
         if (!chartRef.current || isEmptyData) return;
@@ -20,21 +18,21 @@ function LeadsChart({ type, data, labels, showLegend = true }) {
         let config;
         
         if (type === 'line') {
-            // Данные для линейного графика - только статус "Перезвонить"
+            // Данные для линейного графика
             config = {
                 type: 'line',
                 data: {
                     labels: labels || ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
                     datasets: [
                         {
-                            label: 'Лиды в статусе "Перезвонить"',
-                            data: data.callback || [],
-                            borderColor: '#2563eb',
-                            backgroundColor: 'rgba(37, 99, 235, 0.1)',
+                            label: title,
+                            data: data,
+                            borderColor: color,
+                            backgroundColor: color + '20', // Добавляем прозрачность
                             tension: 0.4,
                             borderWidth: 3,
                             fill: true,
-                            pointBackgroundColor: '#2563eb',
+                            pointBackgroundColor: color,
                             pointBorderColor: '#ffffff',
                             pointBorderWidth: 2,
                             pointRadius: 5,
@@ -47,7 +45,7 @@ function LeadsChart({ type, data, labels, showLegend = true }) {
                     maintainAspectRatio: false,
                     plugins: {
                         legend: {
-                            display: showLegend,
+                            display: true,
                             position: 'top'
                         },
                         tooltip: {
@@ -83,8 +81,38 @@ function LeadsChart({ type, data, labels, showLegend = true }) {
                 }
             };
         } else {
-            // Остальной код для круговых диаграмм без изменений
-            // ...
+            // Код для круговой диаграммы
+            const total = data.reduce((sum, val) => sum + val, 0);
+            
+            config = {
+                type: 'doughnut',
+                data: {
+                    labels: [title, ''],
+                    datasets: [{
+                        data: [total, 1],
+                        backgroundColor: [color, '#f3f4f6'],
+                        borderWidth: 0,
+                        hoverOffset: 10
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    cutout: '70%',
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `${title}: ${total}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            };
         }
 
         // Создаем новый график
@@ -96,7 +124,7 @@ function LeadsChart({ type, data, labels, showLegend = true }) {
                 chartInstance.current.destroy();
             }
         };
-    }, [type, data, labels, showLegend, isEmptyData]);
+    }, [type, data, labels, color, title, isEmptyData]);
 
     if (isEmptyData) {
         return (
