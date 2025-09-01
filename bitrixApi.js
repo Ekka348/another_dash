@@ -119,10 +119,10 @@ async function fetchBitrixLeads(startDate, endDate) {
                 select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
                 filter: {
                     'STATUS_ID': Object.keys(STATUS_MAP),
-                    '>=DATE_MODIFY': `${startDateStr} 00:00:00`,
-                    '<=DATE_MODIFY': `${endDateStr} 23:59:59`
+                    '>=DATE_CREATE': `${startDateStr} 00:00:00`,
+                    '<=DATE_CREATE': `${endDateStr} 23:59:59`
                 },
-                order: { "DATE_MODIFY": "ASC" },
+                order: { "DATE_CREATE": "ASC" },
                 start: start
             });
 
@@ -158,6 +158,42 @@ async function fetchBitrixLeads(startDate, endDate) {
         }));
     } catch (error) {
         console.error('Error fetching leads from Bitrix24:', error);
+        throw error;
+    }
+}
+
+// Получение лидов по дням недели
+async function fetchBitrixLeadsByDay(startDate, endDate) {
+    try {
+        const leads = await fetchBitrixLeads(startDate, endDate);
+        
+        // Группируем лиды по дням и статусам
+        const leadsByDay = {};
+        const currentWeekDays = getCurrentWeekDays();
+        
+        // Инициализируем структуру данных
+        currentWeekDays.forEach(day => {
+            leadsByDay[day] = {
+                callback: 0,
+                approval: 0,
+                invited: 0
+            };
+        });
+        
+        // Заполняем данными
+        leads.forEach(lead => {
+            const leadDate = new Date(lead.DATE_CREATE);
+            const dayKey = formatDateForBitrix(leadDate);
+            
+            if (leadsByDay[dayKey]) {
+                const status = mapStatusToStage(lead.STATUS_ID);
+                leadsByDay[dayKey][status]++;
+            }
+        });
+        
+        return leadsByDay;
+    } catch (error) {
+        console.error('Error fetching leads by day:', error);
         throw error;
     }
 }
@@ -218,6 +254,32 @@ async function fetchBitrixUsers() {
     }
 }
 
+// Получение дней текущей недели
+function getCurrentWeekDays() {
+    const days = [];
+    const today = new Date();
+    const firstDayOfWeek = new Date(today);
+    firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
+    
+    for (let i = 0; i < 7; i++) {
+        const day = new Date(firstDayOfWeek);
+        day.setDate(firstDayOfWeek.getDate() + i);
+        days.push(formatDateForBitrix(day));
+    }
+    
+    return days;
+}
+
+// Маппинг статусов Bitrix24 на внутренние стадии
+function mapStatusToStage(statusId) {
+    const mapping = {
+        'IN_PROCESS': 'callback',
+        'UC_A2DF81': 'approval',
+        'CONVERTED': 'invited'
+    };
+    return mapping[statusId] || 'callback';
+}
+
 // Вспомогательные функции для форматирования дат
 function formatDateForBitrix(date) {
     if (!(date instanceof Date)) {
@@ -264,6 +326,7 @@ if (typeof module !== 'undefined' && module.exports) {
         isBitrixConfigured,
         bitrixApiCall,
         fetchBitrixLeads,
+        fetchBitrixLeadsByDay,
         fetchBitrixUsers,
         formatDateForBitrix,
         formatDateForInput,
