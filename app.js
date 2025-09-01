@@ -139,15 +139,6 @@ function App() {
                         </div>
                         
                         <div className="flex items-center gap-4 flex-wrap">
-                            {!window.bitrixConfigured && (
-                                <button
-                                    onClick={() => setShowConfigModal(true)}
-                                    className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600 transition-colors flex items-center gap-2"
-                                >
-                                    <div className="icon-settings text-sm"></div>
-                                    Настроить Bitrix24
-                                </button>
-                            )}
                             
                             <SyncStatus 
                                 lastSync={lastSync} 
