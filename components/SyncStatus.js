@@ -1,4 +1,4 @@
-function SyncStatus({ lastSync, isLoading, onSync, usingMockData }) {
+function SyncStatus({ lastSync, isLoading, onSync }) {
     try {
         const formatSyncTime = (timestamp) => {
             if (!timestamp) return 'Никогда';
@@ -18,7 +18,6 @@ function SyncStatus({ lastSync, isLoading, onSync, usingMockData }) {
 
         return (
             <div className="flex items-center gap-3" data-name="sync-status">
-                
                 <button
                     onClick={onSync}
                     disabled={isLoading}
