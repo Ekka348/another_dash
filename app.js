@@ -45,6 +45,7 @@ function App() {
     const [lastSync, setLastSync] = React.useState(null);
     const [showConfigModal, setShowConfigModal] = React.useState(false);
     const [syncError, setSyncError] = React.useState(null);
+    const [weeklyLeads, setWeeklyLeads] = React.useState({});
     
     const stages = [
         { id: 'callback', name: 'Перезвонить', color: 'text-blue-600' },
@@ -71,6 +72,7 @@ function App() {
             
             setLeadsData(dbData.leadsCount || { callback: 0, approval: 0, invited: 0 });
             setOperatorsData(dbData.operatorsByStage || { callback: [], approval: [], invited: [] });
+            setWeeklyLeads(dbData.weeklyLeads || {});
             setLastSync(dbData.lastSync);
             
             if (dbData.error) {
@@ -84,6 +86,7 @@ function App() {
             // Устанавливаем пустые данные при ошибке
             setLeadsData({ callback: 0, approval: 0, invited: 0 });
             setOperatorsData({ callback: [], approval: [], invited: [] });
+            setWeeklyLeads({});
         } finally {
             setIsLoading(false);
         }
@@ -115,6 +118,42 @@ function App() {
             console.error('Date filter error:', error);
             setSyncError(error.message);
         }
+    };
+
+    // Подготовка данных для графика
+    const getWeeklyChartData = () => {
+        const weeklyData = { callback: [], approval: [], invited: [] };
+        const daysOrder = getCurrentWeekDays();
+        
+        daysOrder.forEach(day => {
+            if (weeklyLeads[day]) {
+                weeklyData.callback.push(weeklyLeads[day].callback || 0);
+                weeklyData.approval.push(weeklyLeads[day].approval || 0);
+                weeklyData.invited.push(weeklyLeads[day].invited || 0);
+            } else {
+                weeklyData.callback.push(0);
+                weeklyData.approval.push(0);
+                weeklyData.invited.push(0);
+            }
+        });
+        
+        return weeklyData;
+    };
+
+    // Получение подписей для графика (даты недели)
+    const getWeekDayLabels = () => {
+        const days = [];
+        const today = new Date();
+        const firstDayOfWeek = new Date(today);
+        firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
+        
+        for (let i = 0; i < 7; i++) {
+            const day = new Date(firstDayOfWeek);
+            day.setDate(firstDayOfWeek.getDate() + i);
+            days.push(day.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' }));
+        }
+        
+        return days;
     };
 
     return (
@@ -196,8 +235,9 @@ function App() {
                         <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить (неделя)</h3>
                         <LeadsChart 
                             type="line" 
-                            data={{ callback: leadsData.callback || 0, approval: 0, invited: 0 }}
-                            period="week"
+                            data={getWeeklyChartData()}
+                            labels={getWeekDayLabels()}
+                            showLegend={false}
                         />
                         <div className="text-center mt-2">
                             <p className="text-2xl font-bold text-blue-600">{leadsData.callback || 0}</p>
@@ -295,6 +335,30 @@ function App() {
             )}
         </div>
     );
+}
+
+// Вспомогательная функция для получения дней недели
+function getCurrentWeekDays() {
+    const days = [];
+    const today = new Date();
+    const firstDayOfWeek = new Date(today);
+    firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
+    
+    for (let i = 0; i < 7; i++) {
+        const day = new Date(firstDayOfWeek);
+        day.setDate(firstDayOfWeek.getDate() + i);
+        days.push(formatDateForBitrix(day));
+    }
+    
+    return days;
+}
+
+// Вспомогательная функция для форматирования даты
+function formatDateForBitrix(date) {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
