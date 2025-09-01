@@ -7,8 +7,8 @@ if (typeof fetchBitrixUsers === 'undefined') {
 if (typeof fetchBitrixLeads === 'undefined') {
     console.error('Ошибка: fetchBitrixLeads не определен');
 }
-if (typeof fetchBitrixLeadsByDay === 'undefined') {
-    console.error('Ошибка: fetchBitrixLeadsByDay не определен');
+if (typeof fetchWeeklyLeadsData === 'undefined') {
+    console.error('Ошибка: fetchWeeklyLeadsData не определен');
 }
 if (typeof loadBitrixConfig === 'undefined') {
     console.error('Ошибка: loadBitrixConfig не определен');
@@ -81,28 +81,6 @@ async function syncWithBitrix24() {
             error: error.message,
             errorType: error.name
         };
-    }
-}
-
-// Получение данных за текущую неделю по дате изменения
-async function fetchWeeklyLeadsData() {
-    try {
-        // Определяем даты начала и конца текущей недели
-        const today = new Date();
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
-        startOfWeek.setHours(0, 0, 0, 0);
-        
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6); // Воскресенье
-        endOfWeek.setHours(23, 59, 59, 999);
-        
-        // Получаем данные за неделю по дате изменения
-        const weeklyLeads = await fetchBitrixLeadsByDay(startOfWeek, endOfWeek);
-        return weeklyLeads;
-    } catch (error) {
-        console.error('Ошибка получения данных за неделю:', error);
-        return {};
     }
 }
 
@@ -233,28 +211,41 @@ function applyDateFilter(startDate, endDate) {
     return syncWithBitrix24();
 }
 
-// Получение всех лидов в статусе "Перезвонить" (без фильтра по дате)
-async function fetchAllCallbackLeads() {
-    try {
-        const leads = await bitrixApiCall('crm.lead.list', {
-            select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
-            filter: {
-                'STATUS_ID': 'IN_PROCESS' // Только лиды в статусе "Перезвонить"
-            }
-        });
+// Подготовка данных для недельного графика
+function prepareWeeklyChartData(weeklyLeadsData) {
+    const daysOrder = getCurrentWeekDays();
+    const result = {
+        callback: Array(7).fill(0),
+        approval: Array(7).fill(0),
+        invited: Array(7).fill(0)
+    };
+    
+    // Заполняем данные для каждого дня
+    daysOrder.forEach((day, index) => {
+        if (weeklyLeadsData[day]) {
+            result.callback[index] = weeklyLeadsData[day].callback || 0;
+            result.approval[index] = weeklyLeadsData[day].approval || 0;
+            result.invited[index] = weeklyLeadsData[day].invited || 0;
+        }
+    });
+    
+    return result;
+}
 
-        return leads.map(lead => ({
-            ID: lead.ID,
-            TITLE: lead.TITLE || `Лид #${lead.ID}`,
-            STATUS_ID: lead.STATUS_ID,
-            ASSIGNED_BY_ID: lead.ASSIGNED_BY_ID,
-            DATE_MODIFY: lead.DATE_MODIFY,
-            DATE_CREATE: lead.DATE_CREATE
-        }));
-    } catch (error) {
-        console.error('Error fetching callback leads:', error);
-        return [];
+// Получение дней текущей недели
+function getCurrentWeekDays() {
+    const days = [];
+    const today = new Date();
+    const firstDayOfWeek = new Date(today);
+    firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
+    
+    for (let i = 0; i < 7; i++) {
+        const day = new Date(firstDayOfWeek);
+        day.setDate(firstDayOfWeek.getDate() + i);
+        days.push(formatDateForBitrix(day));
     }
+    
+    return days;
 }
 
 // Экспорт функций для использования в других модулях
@@ -266,6 +257,8 @@ if (typeof module !== 'undefined' && module.exports) {
         calculateTrend,
         formatRelativeTime,
         applyDateFilter,
+        prepareWeeklyChartData,
+        getCurrentWeekDays,
         EMPTY_LEADS_COUNT,
         EMPTY_OPERATORS_BY_STAGE
     };
