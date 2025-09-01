@@ -4,13 +4,19 @@ function LeadsChart({ type, data }) {
         const chartInstance = React.useRef(null);
 
         // Проверка на одиночные значения (для круговых диаграмм по стадиям)
-        const isSingleValueChart = type === 'doughnut' && 
-                                 ((data.callback > 0 && data.approval === 0 && data.invited === 0) ||
-                                  (data.callback === 0 && data.approval > 0 && data.invited === 0) ||
-                                  (data.callback === 0 && data.approval === 0 && data.invited > 0));
+        const isSingleValueChart = React.useMemo(() => {
+            return type === 'doughnut' && 
+                   ((data.callback > 0 && data.approval === 0 && data.invited === 0) ||
+                    (data.callback === 0 && data.approval > 0 && data.invited === 0) ||
+                    (data.callback === 0 && data.approval === 0 && data.invited > 0));
+        }, [type, data.callback, data.approval, data.invited]);
 
         // Проверка на пустые данные
-        if (!data || (data.callback === 0 && data.approval === 0 && data.invited === 0)) {
+        const isEmptyData = React.useMemo(() => {
+            return !data || (data.callback === 0 && data.approval === 0 && data.invited === 0);
+        }, [data]);
+
+        if (isEmptyData) {
             return (
                 <div className="h-48 flex items-center justify-center">
                     <div className="text-gray-500 text-center">
@@ -20,15 +26,6 @@ function LeadsChart({ type, data }) {
                 </div>
             );
         }
-
-        // Создаем стабильные ссылки на данные
-        const chartData = React.useMemo(() => ({
-            callback: data.callback || 0,
-            approval: data.approval || 0,
-            invited: data.invited || 0
-        }), [data.callback, data.approval, data.invited]);
-
-        const chartType = React.useMemo(() => type, [type]);
 
         React.useEffect(() => {
             if (!chartRef.current) return;
@@ -42,7 +39,7 @@ function LeadsChart({ type, data }) {
 
             let config;
             
-            if (chartType === 'line') {
+            if (type === 'line') {
                 config = {
                     type: 'line',
                     data: {
@@ -50,7 +47,7 @@ function LeadsChart({ type, data }) {
                         datasets: [
                             {
                                 label: 'Перезвонить',
-                                data: [chartData.callback, 0, 0, 0, 0, 0, 0],
+                                data: [data.callback || 0, 0, 0, 0, 0, 0, 0],
                                 borderColor: '#2563eb',
                                 backgroundColor: 'rgba(37, 99, 235, 0.1)',
                                 tension: 0.4,
@@ -59,7 +56,7 @@ function LeadsChart({ type, data }) {
                             },
                             {
                                 label: 'На согласовании',
-                                data: [chartData.approval, 0, 0, 0, 0, 0, 0],
+                                data: [data.approval || 0, 0, 0, 0, 0, 0, 0],
                                 borderColor: '#f59e0b',
                                 backgroundColor: 'rgba(245, 158, 11, 0.1)',
                                 tension: 0.4,
@@ -68,7 +65,7 @@ function LeadsChart({ type, data }) {
                             },
                             {
                                 label: 'Приглашен к рекрутеру',
-                                data: [chartData.invited, 0, 0, 0, 0, 0, 0],
+                                data: [data.invited || 0, 0, 0, 0, 0, 0, 0],
                                 borderColor: '#10b981',
                                 backgroundColor: 'rgba(16, 185, 129, 0.1)',
                                 tension: 0.4,
@@ -104,16 +101,16 @@ function LeadsChart({ type, data }) {
                     let label = '';
                     let color = '';
                     
-                    if (chartData.callback > 0) {
-                        activeValue = chartData.callback;
+                    if (data.callback > 0) {
+                        activeValue = data.callback;
                         label = 'Перезвонить';
                         color = '#2563eb';
-                    } else if (chartData.approval > 0) {
-                        activeValue = chartData.approval;
+                    } else if (data.approval > 0) {
+                        activeValue = data.approval;
                         label = 'На согласовании';
                         color = '#f59e0b';
-                    } else if (chartData.invited > 0) {
-                        activeValue = chartData.invited;
+                    } else if (data.invited > 0) {
+                        activeValue = data.invited;
                         label = 'Приглашен к рекрутеру';
                         color = '#10b981';
                     }
@@ -154,7 +151,7 @@ function LeadsChart({ type, data }) {
                         data: {
                             labels: ['Перезвонить', 'На согласовании', 'Приглашен к рекрутеру'],
                             datasets: [{
-                                data: [chartData.callback, chartData.approval, chartData.invited],
+                                data: [data.callback || 0, data.approval || 0, data.invited || 0],
                                 backgroundColor: ['#2563eb', '#f59e0b', '#10b981'],
                                 borderWidth: 0,
                                 hoverOffset: 10
@@ -184,7 +181,7 @@ function LeadsChart({ type, data }) {
                     chartInstance.current.destroy();
                 }
             };
-        }, [chartType, chartData.callback, chartData.approval, chartData.invited, isSingleValueChart]);
+        }, [type, data, isSingleValueChart]);
 
         return (
             <div className="h-48" data-name="leads-chart">
