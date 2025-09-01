@@ -319,6 +319,84 @@ function formatDateTimeDisplay(date) {
     }
 }
 
+// Получение количества лидов в статусе на каждый день недели
+async function fetchLeadsCountByStatusPerDay(statusId, startDate, endDate) {
+    try {
+        // Получаем все лиды в указанном статусе за период
+        const leads = await bitrixApiCall('crm.lead.list', {
+            select: ['ID', 'STATUS_ID', 'DATE_MODIFY'],
+            filter: {
+                'STATUS_ID': statusId,
+                '>=DATE_MODIFY': formatDateForBitrix(startDate) + ' 00:00:00',
+                '<=DATE_MODIFY': formatDateForBitrix(endDate) + ' 23:59:59'
+            }
+        });
+
+        // Группируем по дням
+        const leadsByDay = {};
+        const currentDate = new Date(startDate);
+        
+        // Инициализируем все дни недели
+        while (currentDate <= endDate) {
+            const dayKey = formatDateForBitrix(new Date(currentDate));
+            leadsByDay[dayKey] = 0;
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+
+        // Заполняем данными
+        leads.forEach(lead => {
+            if (!lead.DATE_MODIFY) return;
+            
+            const modifyDate = new Date(lead.DATE_MODIFY);
+            const dayKey = formatDateForBitrix(modifyDate);
+            
+            if (leadsByDay[dayKey] !== undefined) {
+                leadsByDay[dayKey]++;
+            }
+        });
+
+        return leadsByDay;
+    } catch (error) {
+        console.error('Error fetching leads count by day:', error);
+        throw error;
+    }
+}
+
+// Получение данных для всех статусов за неделю
+async function fetchWeeklyLeadsData() {
+    try {
+        // Определяем даты начала и конца текущей недели
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
+        startOfWeek.setHours(0, 0, 0, 0);
+        
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6); // Воскресенье
+        endOfWeek.setHours(23, 59, 59, 999);
+
+        // Получаем данные для всех статусов
+        const [callbackLeads, approvalLeads, invitedLeads] = await Promise.all([
+            fetchLeadsCountByStatusPerDay('IN_PROCESS', startOfWeek, endOfWeek),
+            fetchLeadsCountByStatusPerDay('UC_A2DF81', startOfWeek, endOfWeek),
+            fetchLeadsCountByStatusPerDay('CONVERTED', startOfWeek, endOfWeek)
+        ]);
+
+        return {
+            callback: callbackLeads,
+            approval: approvalLeads,
+            invited: invitedLeads
+        };
+    } catch (error) {
+        console.error('Error fetching weekly leads data:', error);
+        return {
+            callback: {},
+            approval: {},
+            invited: {}
+        };
+    }
+}
+
 // Экспорт функций для использования в других модулях
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
