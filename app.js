@@ -44,7 +44,6 @@ function App() {
     const [isLoading, setIsLoading] = React.useState(false);
     const [lastSync, setLastSync] = React.useState(null);
     const [showConfigModal, setShowConfigModal] = React.useState(false);
-    const [usingMockData, setUsingMockData] = React.useState(true);
     const [syncError, setSyncError] = React.useState(null);
     
     const stages = [
@@ -144,7 +143,6 @@ function App() {
                                 lastSync={lastSync} 
                                 isLoading={isLoading} 
                                 onSync={handleSync}
-                                usingMockData={usingMockData}
                             />
                         </div>
                     </div>
