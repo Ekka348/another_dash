@@ -95,7 +95,6 @@ async function bitrixApiCall(method, params = {}) {
     }
 }
 
-// Получение лидов из Bitrix24 с фильтрацией по статусам (С ПАГИНАЦИЕЙ)
 async function fetchBitrixLeads(startDate, endDate) {
     try {
         if (!startDate || !endDate) {
@@ -111,18 +110,16 @@ async function fetchBitrixLeads(startDate, endDate) {
         let start = 0;
         const batchSize = 50;
         let hasMore = true;
-        let totalLoaded = 0;
 
-        // Пагинация - получаем данные порциями
         while (hasMore) {
             const leads = await bitrixApiCall('crm.lead.list', {
                 select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
                 filter: {
-                    'STATUS_ID': Object.keys(STATUS_MAP),
-                    '>=DATE_CREATE': `${startDateStr} 00:00:00`,
-                    '<=DATE_CREATE': `${endDateStr} 23:59:59`
+                    'STATUS_ID': 'IN_PROCESS', // Только лиды в статусе "Перезвонить"
+                    '>=DATE_MODIFY': `${startDateStr} 00:00:00`,
+                    '<=DATE_MODIFY': `${endDateStr} 23:59:59`
                 },
-                order: { "DATE_CREATE": "ASC" },
+                order: { "DATE_MODIFY": "DESC" }, // Сначала самые свежие
                 start: start
             });
 
@@ -132,17 +129,13 @@ async function fetchBitrixLeads(startDate, endDate) {
             }
 
             allLeads = allLeads.concat(leads);
-            totalLoaded += leads.length;
-            
-            console.log(`Loaded batch of ${leads.length} leads, total: ${totalLoaded}`);
+            console.log(`Loaded batch of ${leads.length} leads, total: ${allLeads.length}`);
 
-            // Проверяем есть ли еще данные
             if (leads.length < batchSize) {
                 hasMore = false;
             } else {
                 start += batchSize;
-                // Небольшая задержка чтобы не превысить лимиты API
-                await new Promise(resolve => setTimeout(resolve, 50));
+                await new Promise(resolve => setTimeout(resolve, 100));
             }
         }
 
