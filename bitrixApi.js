@@ -95,6 +95,7 @@ async function bitrixApiCall(method, params = {}) {
     }
 }
 
+// Получение лидов из Bitrix24 с фильтрацией по статусам (С ПАГИНАЦИЕЙ)
 async function fetchBitrixLeads(startDate, endDate) {
     try {
         if (!startDate || !endDate) {
@@ -110,16 +111,18 @@ async function fetchBitrixLeads(startDate, endDate) {
         let start = 0;
         const batchSize = 50;
         let hasMore = true;
+        let totalLoaded = 0;
 
+        // Пагинация - получаем данные порциями
         while (hasMore) {
             const leads = await bitrixApiCall('crm.lead.list', {
                 select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
                 filter: {
-                    'STATUS_ID': 'IN_PROCESS', // Только лиды в статусе "Перезвонить"
+                    'STATUS_ID': Object.keys(STATUS_MAP),
                     '>=DATE_MODIFY': `${startDateStr} 00:00:00`,
                     '<=DATE_MODIFY': `${endDateStr} 23:59:59`
                 },
-                order: { "DATE_MODIFY": "DESC" }, // Сначала самые свежие
+                order: { "DATE_MODIFY": "ASC" },
                 start: start
             });
 
@@ -129,13 +132,17 @@ async function fetchBitrixLeads(startDate, endDate) {
             }
 
             allLeads = allLeads.concat(leads);
-            console.log(`Loaded batch of ${leads.length} leads, total: ${allLeads.length}`);
+            totalLoaded += leads.length;
+            
+            console.log(`Loaded batch of ${leads.length} leads, total: ${totalLoaded}`);
 
+            // Проверяем есть ли еще данные
             if (leads.length < batchSize) {
                 hasMore = false;
             } else {
                 start += batchSize;
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // Небольшая задержка чтобы не превысить лимиты API
+                await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
 
@@ -151,50 +158,6 @@ async function fetchBitrixLeads(startDate, endDate) {
         }));
     } catch (error) {
         console.error('Error fetching leads from Bitrix24:', error);
-        throw error;
-    }
-}
-
-// Получение лидов по дням недели (все лиды в статусе "Перезвонить" на каждый день)
-async function fetchBitrixLeadsByDay(startDate, endDate) {
-    try {
-        // Получаем ВСЕ лиды в статусе "Перезвонить", независимо от даты создания/изменения
-        const leads = await bitrixApiCall('crm.lead.list', {
-            select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
-            filter: {
-                'STATUS_ID': 'IN_PROCESS' // Только лиды в статусе "Перезвонить"
-            },
-            order: { "DATE_CREATE": "ASC" }
-        });
-
-        // Группируем лиды по дням изменения (DATE_MODIFY)
-        const leadsByDay = {};
-        const currentWeekDays = getCurrentWeekDays();
-        
-        // Инициализируем структуру данных
-        currentWeekDays.forEach(day => {
-            leadsByDay[day] = {
-                callback: 0,
-                approval: 0,
-                invited: 0
-            };
-        });
-        
-        // Заполняем данными по дате изменения
-        leads.forEach(lead => {
-            if (!lead.DATE_MODIFY) return;
-            
-            const modifyDate = new Date(lead.DATE_MODIFY);
-            const dayKey = formatDateForBitrix(modifyDate);
-            
-            if (leadsByDay[dayKey]) {
-                leadsByDay[dayKey].callback++; // Увеличиваем счетчик для дня
-            }
-        });
-        
-        return leadsByDay;
-    } catch (error) {
-        console.error('Error fetching leads by day:', error);
         throw error;
     }
 }
@@ -255,20 +218,66 @@ async function fetchBitrixUsers() {
     }
 }
 
-// Получение дней текущей недели
-function getCurrentWeekDays() {
-    const days = [];
-    const today = new Date();
-    const firstDayOfWeek = new Date(today);
-    firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
-    
-    for (let i = 0; i < 7; i++) {
-        const day = new Date(firstDayOfWeek);
-        day.setDate(firstDayOfWeek.getDate() + i);
-        days.push(formatDateForBitrix(day));
+// Получение количества лидов по дням для каждого статуса
+async function fetchLeadsCountByDay(startDate, endDate) {
+    try {
+        // Получаем все лиды за период
+        const leads = await fetchBitrixLeads(startDate, endDate);
+        
+        // Инициализируем объект для хранения данных по дням
+        const daysData = {};
+        const currentDate = new Date(startDate);
+        
+        // Создаем записи для всех дней в периоде
+        while (currentDate <= endDate) {
+            const dayKey = formatDateForBitrix(new Date(currentDate));
+            daysData[dayKey] = {
+                callback: 0,
+                approval: 0,
+                invited: 0
+            };
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        // Заполняем данными
+        leads.forEach(lead => {
+            if (!lead.DATE_MODIFY) return;
+            
+            const modifyDate = new Date(lead.DATE_MODIFY);
+            const dayKey = formatDateForBitrix(modifyDate);
+            
+            if (daysData[dayKey]) {
+                const status = mapStatusToStage(lead.STATUS_ID);
+                daysData[dayKey][status]++;
+            }
+        });
+        
+        return daysData;
+    } catch (error) {
+        console.error('Error fetching leads count by day:', error);
+        throw error;
     }
-    
-    return days;
+}
+
+// Получение данных за текущую неделю
+async function fetchWeeklyLeadsData() {
+    try {
+        // Определяем даты начала и конца текущей недели
+        const today = new Date();
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
+        startOfWeek.setHours(0, 0, 0, 0);
+        
+        const endOfWeek = new Date(startOfWeek);
+        endOfWeek.setDate(startOfWeek.getDate() + 6); // Воскресенье
+        endOfWeek.setHours(23, 59, 59, 999);
+        
+        // Получаем данные за неделю
+        return await fetchLeadsCountByDay(startOfWeek, endOfWeek);
+    } catch (error) {
+        console.error('Error fetching weekly leads data:', error);
+        return {};
+    }
 }
 
 // Маппинг статусов Bitrix24 на внутренние стадии
@@ -319,84 +328,6 @@ function formatDateTimeDisplay(date) {
     }
 }
 
-// Получение количества лидов в статусе на каждый день недели
-async function fetchLeadsCountByStatusPerDay(statusId, startDate, endDate) {
-    try {
-        // Получаем все лиды в указанном статусе за период
-        const leads = await bitrixApiCall('crm.lead.list', {
-            select: ['ID', 'STATUS_ID', 'DATE_MODIFY'],
-            filter: {
-                'STATUS_ID': statusId,
-                '>=DATE_MODIFY': formatDateForBitrix(startDate) + ' 00:00:00',
-                '<=DATE_MODIFY': formatDateForBitrix(endDate) + ' 23:59:59'
-            }
-        });
-
-        // Группируем по дням
-        const leadsByDay = {};
-        const currentDate = new Date(startDate);
-        
-        // Инициализируем все дни недели
-        while (currentDate <= endDate) {
-            const dayKey = formatDateForBitrix(new Date(currentDate));
-            leadsByDay[dayKey] = 0;
-            currentDate.setDate(currentDate.getDate() + 1);
-        }
-
-        // Заполняем данными
-        leads.forEach(lead => {
-            if (!lead.DATE_MODIFY) return;
-            
-            const modifyDate = new Date(lead.DATE_MODIFY);
-            const dayKey = formatDateForBitrix(modifyDate);
-            
-            if (leadsByDay[dayKey] !== undefined) {
-                leadsByDay[dayKey]++;
-            }
-        });
-
-        return leadsByDay;
-    } catch (error) {
-        console.error('Error fetching leads count by day:', error);
-        throw error;
-    }
-}
-
-// Получение данных для всех статусов за неделю
-async function fetchWeeklyLeadsData() {
-    try {
-        // Определяем даты начала и конца текущей недели
-        const today = new Date();
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
-        startOfWeek.setHours(0, 0, 0, 0);
-        
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6); // Воскресенье
-        endOfWeek.setHours(23, 59, 59, 999);
-
-        // Получаем данные для всех статусов
-        const [callbackLeads, approvalLeads, invitedLeads] = await Promise.all([
-            fetchLeadsCountByStatusPerDay('IN_PROCESS', startOfWeek, endOfWeek),
-            fetchLeadsCountByStatusPerDay('UC_A2DF81', startOfWeek, endOfWeek),
-            fetchLeadsCountByStatusPerDay('CONVERTED', startOfWeek, endOfWeek)
-        ]);
-
-        return {
-            callback: callbackLeads,
-            approval: approvalLeads,
-            invited: invitedLeads
-        };
-    } catch (error) {
-        console.error('Error fetching weekly leads data:', error);
-        return {
-            callback: {},
-            approval: {},
-            invited: {}
-        };
-    }
-}
-
 // Экспорт функций для использования в других модулях
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
@@ -405,8 +336,8 @@ if (typeof module !== 'undefined' && module.exports) {
         isBitrixConfigured,
         bitrixApiCall,
         fetchBitrixLeads,
-        fetchBitrixLeadsByDay,
         fetchBitrixUsers,
+        fetchWeeklyLeadsData,
         formatDateForBitrix,
         formatDateForInput,
         formatDateTimeDisplay
