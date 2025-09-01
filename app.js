@@ -72,7 +72,19 @@ function App() {
             
             setLeadsData(dbData.leadsCount || { callback: 0, approval: 0, invited: 0 });
             setOperatorsData(dbData.operatorsByStage || { callback: [], approval: [], invited: [] });
-            setWeeklyLeads(dbData.weeklyLeads || {});
+            
+            // Подготавливаем данные для недельного графика
+            if (dbData.weeklyLeads) {
+                const preparedData = prepareWeeklyChartData(dbData.weeklyLeads);
+                setWeeklyLeads(preparedData);
+            } else {
+                setWeeklyLeads({
+                    callback: Array(7).fill(0),
+                    approval: Array(7).fill(0),
+                    invited: Array(7).fill(0)
+                });
+            }
+            
             setLastSync(dbData.lastSync);
             
             if (dbData.error) {
@@ -86,7 +98,11 @@ function App() {
             // Устанавливаем пустые данные при ошибке
             setLeadsData({ callback: 0, approval: 0, invited: 0 });
             setOperatorsData({ callback: [], approval: [], invited: [] });
-            setWeeklyLeads({});
+            setWeeklyLeads({
+                callback: Array(7).fill(0),
+                approval: Array(7).fill(0),
+                invited: Array(7).fill(0)
+            });
         } finally {
             setIsLoading(false);
         }
@@ -118,22 +134,6 @@ function App() {
             console.error('Date filter error:', error);
             setSyncError(error.message);
         }
-    };
-
-    // Подготовка данных для графиков
-    const getWeeklyChartData = (status) => {
-        const weeklyData = [];
-        const daysOrder = getCurrentWeekDays();
-        
-        daysOrder.forEach(day => {
-            if (weeklyLeads[day]) {
-                weeklyData.push(weeklyLeads[day][status] || 0);
-            } else {
-                weeklyData.push(0);
-            }
-        });
-        
-        return weeklyData;
     };
 
     // Получение подписей для графиков (даты недели)
@@ -229,10 +229,10 @@ function App() {
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     {/* График для Перезвонить */}
                     <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Общее количество лидов в статусе за текущую неделю</h3>
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Лиды в статусе "Перезвонить" по дням недели</h3>
                         <LeadsChart 
                             type="line" 
-                            data={getWeeklyChartData('callback')}
+                            data={weeklyLeads.callback || Array(7).fill(0)}
                             labels={getWeekDayLabels()}
                             color="#2563eb"
                             title="Перезвонить"
@@ -241,10 +241,10 @@ function App() {
                     
                     {/* График для На согласовании */}
                     <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Общее количество лидов в статусе за текущую неделю</h3>
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Лиды в статусе "На согласовании" по дням недели</h3>
                         <LeadsChart 
                             type="line" 
-                            data={getWeeklyChartData('approval')}
+                            data={weeklyLeads.approval || Array(7).fill(0)}
                             labels={getWeekDayLabels()}
                             color="#f59e0b"
                             title="На согласовании"
@@ -253,10 +253,10 @@ function App() {
                     
                     {/* График для Приглашены */}
                     <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Общее количество лидов в статусе за текущую неделю</h3>
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Лиды в статусе "Приглашен к рекрутеру" по дням недели</h3>
                         <LeadsChart 
                             type="line" 
-                            data={getWeeklyChartData('invited')}
+                            data={weeklyLeads.invited || Array(7).fill(0)}
                             labels={getWeekDayLabels()}
                             color="#10b981"
                             title="Приглашен к рекрутеру"
@@ -329,22 +329,6 @@ function App() {
             )}
         </div>
     );
-}
-
-// Вспомогательная функция для получения дней недели
-function getCurrentWeekDays() {
-    const days = [];
-    const today = new Date();
-    const firstDayOfWeek = new Date(today);
-    firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
-    
-    for (let i = 0; i < 7; i++) {
-        const day = new Date(firstDayOfWeek);
-        day.setDate(firstDayOfWeek.getDate() + i);
-        days.push(formatDateForBitrix(day));
-    }
-    
-    return days;
 }
 
 // Вспомогательная функция для форматирования даты
