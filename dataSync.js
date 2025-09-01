@@ -55,7 +55,6 @@ async function syncWithBitrix24() {
         return {
             ...processedData,
             lastSync: new Date().toISOString(),
-            usingMockData: false
         };
 
     } catch (error) {
