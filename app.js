@@ -234,7 +234,7 @@ function App() {
     <div className="dashboard-card">
         <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить (неделя)</h3>
         <div className="text-sm text-gray-600 mb-2">
-            По дате изменения статуса
+            Общее количество лидов в статусе по дням
         </div>
         <LeadsChart 
             type="line" 
@@ -244,10 +244,10 @@ function App() {
         />
         <div className="text-center mt-2">
             <p className="text-2xl font-bold text-blue-600">{leadsData.callback || 0}</p>
-            <p className="text-sm text-gray-600">лидов за неделю</p>
+            <p className="text-sm text-gray-600">лидов в статусе сейчас</p>
         </div>
     </div>
-                
+            
                     <div className="dashboard-card">
                         <h3 className="text-lg font-semibold mb-4 text-gray-900">⏳ На согласовании</h3>
                         <LeadsChart 
