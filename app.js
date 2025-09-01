@@ -225,7 +225,7 @@ function App() {
                     />
                 </div>
 
-                // Charts Section - ГРАФИКИ ПО СТАДИЯМ
+                // Charts Section - ГРАФИКИ ПО СТАДИЯМ //
 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
     {/* График для Перезвонить */}
     <div className="dashboard-card">
