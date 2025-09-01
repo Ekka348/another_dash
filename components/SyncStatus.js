@@ -18,11 +18,6 @@ function SyncStatus({ lastSync, isLoading, onSync, usingMockData }) {
 
         return (
             <div className="flex items-center gap-3" data-name="sync-status">
-                {usingMockData && (
-                    <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-sm">
-                        Демо-данные
-                    </span>
-                )}
                 
                 <button
                     onClick={onSync}
