@@ -65,7 +65,7 @@ function LeadsChart({ type, data, labels, color, title }) {
                                 color: 'rgba(0, 0, 0, 0.1)'
                             },
                             ticks: {
-                                stepSize: 1
+                                stepSize: Math.max(1, Math.floor(Math.max(...data) / 5)) || 1
                             }
                         },
                         x: {
