@@ -84,7 +84,7 @@ async function syncWithBitrix24() {
     }
 }
 
-// Получение данных за текущую неделю
+// Получение данных за текущую неделю по дате изменения
 async function fetchWeeklyLeadsData() {
     try {
         // Определяем даты начала и конца текущей недели
@@ -97,7 +97,7 @@ async function fetchWeeklyLeadsData() {
         endOfWeek.setDate(startOfWeek.getDate() + 6); // Воскресенье
         endOfWeek.setHours(23, 59, 59, 999);
         
-        // Получаем данные за неделю
+        // Получаем данные за неделю по дате изменения
         const weeklyLeads = await fetchBitrixLeadsByDay(startOfWeek, endOfWeek);
         return weeklyLeads;
     } catch (error) {
