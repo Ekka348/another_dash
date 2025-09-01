@@ -229,22 +229,25 @@ function App() {
                     />
                 </div>
 
-                {/* Charts Section - ГРАФИКИ ПО СТАДИЯМ */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                    <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить (неделя)</h3>
-                        <LeadsChart 
-                            type="line" 
-                            data={getWeeklyChartData()}
-                            labels={getWeekDayLabels()}
-                            showLegend={false}
-                        />
-                        <div className="text-center mt-2">
-                            <p className="text-2xl font-bold text-blue-600">{leadsData.callback || 0}</p>
-                            <p className="text-sm text-gray-600">лидов за неделю</p>
-                        </div>
-                    </div>
-                    
+              {/* Charts Section - ГРАФИКИ ПО СТАДИЯМ */}
+<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    <div className="dashboard-card">
+        <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить (неделя)</h3>
+        <div className="text-sm text-gray-600 mb-2">
+            По дате изменения статуса
+        </div>
+        <LeadsChart 
+            type="line" 
+            data={getWeeklyChartData()}
+            labels={getWeekDayLabels()}
+            showLegend={false}
+        />
+        <div className="text-center mt-2">
+            <p className="text-2xl font-bold text-blue-600">{leadsData.callback || 0}</p>
+            <p className="text-sm text-gray-600">лидов за неделю</p>
+        </div>
+    </div>
+                
                     <div className="dashboard-card">
                         <h3 className="text-lg font-semibold mb-4 text-gray-900">⏳ На согласовании</h3>
                         <LeadsChart 
