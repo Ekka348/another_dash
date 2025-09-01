@@ -46,7 +46,14 @@ function LeadsChart({ type, data, labels, color, title }) {
                     plugins: {
                         legend: {
                             display: true,
-                            position: 'top'
+                            position: 'top',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20,
+                                font: {
+                                    size: 12
+                                }
+                            }
                         },
                         tooltip: {
                             mode: 'index',
