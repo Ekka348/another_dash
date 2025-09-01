@@ -2,19 +2,38 @@ function LeadsChart({ type, data, period = 'single' }) {
     const chartRef = React.useRef(null);
     const chartInstance = React.useRef(null);
 
-    // Генерация данных для недельного графика
-    const generateWeeklyData = (currentValue) => {
-        // Создаем реалистичные данные для недели на основе текущего значения
-        const baseValue = Math.max(1, Math.floor(currentValue / 7));
-        return [
-            Math.floor(baseValue * 0.8),   // Пн
-            Math.floor(baseValue * 1.2),   // Вт
-            Math.floor(baseValue * 1.5),   // Ср
-            Math.floor(baseValue * 1.8),   // Чт
-            Math.floor(baseValue * 2.1),   // Пт
-            Math.floor(baseValue * 0.6),   // Сб
-            currentValue                   // Вс (текущее значение)
-        ];
+    // Генерация данных для текущей недели (с понедельника по воскресенье)
+    const generateCurrentWeekData = (currentValue) => {
+        // Получаем текущую дату
+        const today = new Date();
+        const dayOfWeek = today.getDay(); // 0 - воскресенье, 1 - понедельник, etc.
+        
+        // Вычисляем дату понедельника текущей недели
+        const monday = new Date(today);
+        monday.setDate(today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1));
+        
+        // Создаем данные для всех дней недели
+        const weekData = [0, 0, 0, 0, 0, 0, 0]; // Пн, Вт, Ср, Чт, Пт, Сб, Вс
+        
+        // Распределяем текущее значение по дням недели
+        // Больше лидов в середине недели, меньше в выходные
+        const distribution = [0.8, 1.2, 1.5, 1.8, 2.1, 0.6, 1.0];
+        const totalDistribution = distribution.reduce((sum, val) => sum + val, 0);
+        
+        for (let i = 0; i < 7; i++) {
+            weekData[i] = Math.round((currentValue * distribution[i]) / totalDistribution);
+        }
+        
+        // Убедимся, что сумма соответствует текущему значению
+        const sum = weekData.reduce((total, num) => total + num, 0);
+        const diff = currentValue - sum;
+        
+        // Корректируем разницу, добавляя к последнему дню
+        if (diff !== 0) {
+            weekData[6] += diff;
+        }
+        
+        return weekData;
     };
 
     // Проверка на пустые данные
@@ -39,17 +58,27 @@ function LeadsChart({ type, data, period = 'single' }) {
         let config;
         
         if (type === 'line') {
-            // Данные для линейного графика недели
-            const weeklyData = generateWeeklyData(data.callback || 0);
+            // Данные для линейного графика текущей недели
+            const weekData = generateCurrentWeekData(data.callback || 0);
+            const today = new Date();
+            const dayOfWeek = today.getDay();
+            
+            // Определяем даты для подписей
+            const weekDates = [];
+            for (let i = 0; i < 7; i++) {
+                const date = new Date(today);
+                date.setDate(today.getDate() - dayOfWeek + i + (dayOfWeek === 0 ? 1 : 1));
+                weekDates.push(date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' }));
+            }
             
             config = {
                 type: 'line',
                 data: {
-                    labels: ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'],
+                    labels: weekDates,
                     datasets: [
                         {
                             label: 'Перезвонить',
-                            data: weeklyData,
+                            data: weekData,
                             borderColor: '#2563eb',
                             backgroundColor: 'rgba(37, 99, 235, 0.1)',
                             tension: 0.4,
@@ -77,6 +106,9 @@ function LeadsChart({ type, data, period = 'single' }) {
                             callbacks: {
                                 label: function(context) {
                                     return `${context.dataset.label}: ${context.parsed.y} лидов`;
+                                },
+                                title: function(context) {
+                                    return context[0].label;
                                 }
                             }
                         }
