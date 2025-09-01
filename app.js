@@ -120,27 +120,23 @@ function App() {
         }
     };
 
-    // Подготовка данных для графика
-    const getWeeklyChartData = () => {
-        const weeklyData = { callback: [], approval: [], invited: [] };
+    // Подготовка данных для графиков
+    const getWeeklyChartData = (status) => {
+        const weeklyData = [];
         const daysOrder = getCurrentWeekDays();
         
         daysOrder.forEach(day => {
             if (weeklyLeads[day]) {
-                weeklyData.callback.push(weeklyLeads[day].callback || 0);
-                weeklyData.approval.push(weeklyLeads[day].approval || 0);
-                weeklyData.invited.push(weeklyLeads[day].invited || 0);
+                weeklyData.push(weeklyLeads[day][status] || 0);
             } else {
-                weeklyData.callback.push(0);
-                weeklyData.approval.push(0);
-                weeklyData.invited.push(0);
+                weeklyData.push(0);
             }
         });
         
         return weeklyData;
     };
 
-    // Получение подписей для графика (даты недели)
+    // Получение подписей для графиков (даты недели)
     const getWeekDayLabels = () => {
         const days = [];
         const today = new Date();
@@ -229,47 +225,42 @@ function App() {
                     />
                 </div>
 
-              {/* Charts Section - ГРАФИКИ ПО СТАДИЯМ */}
-<div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-    <div className="dashboard-card">
-        <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить (неделя)</h3>
-        <div className="text-sm text-gray-600 mb-2">
-            Общее количество лидов в статусе по дням
-        </div>
-        <LeadsChart 
-            type="line" 
-            data={getWeeklyChartData()}
-            labels={getWeekDayLabels()}
-            showLegend={false}
-        />
-        <div className="text-center mt-2">
-            <p className="text-2xl font-bold text-blue-600">{leadsData.callback || 0}</p>
-            <p className="text-sm text-gray-600">лидов в статусе сейчас</p>
-        </div>
-    </div>
-            
+                {/* Charts Section - ГРАФИКИ ПО СТАДИЯМ */}
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+                    {/* График для Перезвонить */}
                     <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">⏳ На согласовании</h3>
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Общее количество лидов в статусе за текущую неделю</h3>
                         <LeadsChart 
-                            type="doughnut" 
-                            data={{ callback: 0, approval: leadsData.approval || 0, invited: 0 }}
+                            type="line" 
+                            data={getWeeklyChartData('callback')}
+                            labels={getWeekDayLabels()}
+                            color="#2563eb"
+                            title="Перезвонить"
                         />
-                        <div className="text-center mt-2">
-                            <p className="text-2xl font-bold text-yellow-600">{leadsData.approval || 0}</p>
-                            <p className="text-sm text-gray-600">лидов</p>
-                        </div>
                     </div>
                     
+                    {/* График для На согласовании */}
                     <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">✅ Приглашены</h3>
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Общее количество лидов в статусе за текущую неделю</h3>
                         <LeadsChart 
-                            type="doughnut" 
-                            data={{ callback: 0, approval: 0, invited: leadsData.invited || 0 }}
+                            type="line" 
+                            data={getWeeklyChartData('approval')}
+                            labels={getWeekDayLabels()}
+                            color="#f59e0b"
+                            title="На согласовании"
                         />
-                        <div className="text-center mt-2">
-                            <p className="text-2xl font-bold text-green-600">{leadsData.invited || 0}</p>
-                            <p className="text-sm text-gray-600">лидов</p>
-                        </div>
+                    </div>
+                    
+                    {/* График для Приглашены */}
+                    <div className="dashboard-card">
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">Общее количество лидов в статусе за текущую неделю</h3>
+                        <LeadsChart 
+                            type="line" 
+                            data={getWeeklyChartData('invited')}
+                            labels={getWeekDayLabels()}
+                            color="#10b981"
+                            title="Приглашен к рекрутеру"
+                        />
                     </div>
                 </div>
 
