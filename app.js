@@ -193,14 +193,15 @@ function App() {
                 {/* Charts Section - ГРАФИКИ ПО СТАДИЯМ */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     <div className="dashboard-card">
-                        <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить</h3>
+                        <h3 className="text-lg font-semibold mb-4 text-gray-900">📞 Перезвонить (неделя)</h3>
                         <LeadsChart 
-                            type="doughnut" 
+                            type="line" 
                             data={{ callback: leadsData.callback || 0, approval: 0, invited: 0 }}
+                            period="week"
                         />
                         <div className="text-center mt-2">
                             <p className="text-2xl font-bold text-blue-600">{leadsData.callback || 0}</p>
-                            <p className="text-sm text-gray-600">лидов</p>
+                            <p className="text-sm text-gray-600">лидов за неделю</p>
                         </div>
                     </div>
                     
