@@ -42,10 +42,12 @@ function App() {
     const [leadsData, setLeadsData] = React.useState({ callback: 0, approval: 0, invited: 0 });
     const [operatorsData, setOperatorsData] = React.useState({ callback: [], approval: [], invited: [] });
     const [isLoading, setIsLoading] = React.useState(false);
+    const [isBackgroundLoading, setIsBackgroundLoading] = React.useState(false);
     const [lastSync, setLastSync] = React.useState(null);
     const [showConfigModal, setShowConfigModal] = React.useState(false);
     const [syncError, setSyncError] = React.useState(null);
     const [weeklyLeads, setWeeklyLeads] = React.useState({});
+    const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
     
     const stages = [
         { id: 'callback', name: 'Перезвонить', color: 'text-blue-600' },
@@ -53,15 +55,43 @@ function App() {
         { id: 'invited', name: 'Приглашен к рекрутеру', color: 'text-green-600' }
     ];
 
+    // Реф для хранения интервала автообновления
+    const refreshIntervalRef = React.useRef(null);
+
     // Проверяем настройку Bitrix24 при загрузке
     React.useEffect(() => {
         loadBitrixConfig();
         loadDataFromDatabase();
+        startAutoRefresh();
+
+        // Очистка при размонтировании
+        return () => {
+            if (refreshIntervalRef.current) {
+                clearInterval(refreshIntervalRef.current);
+            }
+        };
     }, []);
 
-    const loadDataFromDatabase = async () => {
+    // Запуск автообновления каждые 2 минуты
+    const startAutoRefresh = () => {
+        if (refreshIntervalRef.current) {
+            clearInterval(refreshIntervalRef.current);
+        }
+
+        refreshIntervalRef.current = setInterval(() => {
+            if (autoRefreshEnabled && !isLoading) {
+                loadDataFromDatabase(true); // true - фоновое обновление
+            }
+        }, 2 * 60 * 1000); // 2 минуты
+    };
+
+    const loadDataFromDatabase = async (isBackground = false) => {
         try {
-            setIsLoading(true);
+            if (!isBackground) {
+                setIsLoading(true);
+            } else {
+                setIsBackgroundLoading(true);
+            }
             setSyncError(null);
             
             if (typeof syncWithBitrix24 === 'undefined') {
@@ -105,18 +135,16 @@ function App() {
             });
         } finally {
             setIsLoading(false);
+            setIsBackgroundLoading(false);
         }
     };
 
     const handleSync = async () => {
         try {
-            setIsLoading(true);
-            await loadDataFromDatabase();
+            await loadDataFromDatabase(false); // Обычное обновление
         } catch (error) {
             console.error('Sync error:', error);
             setSyncError(error.message);
-        } finally {
-            setIsLoading(false);
         }
     };
 
@@ -181,11 +209,20 @@ function App() {
                                 lastSync={lastSync} 
                                 isLoading={isLoading} 
                                 onSync={handleSync}
+                                isAutoRefresh={autoRefreshEnabled}
                             />
                         </div>
                     </div>
                 </div>
             </header>
+
+            {/* Индикатор фонового обновления */}
+            {isBackgroundLoading && (
+                <div className="fixed top-4 right-4 bg-blue-500 text-white px-3 py-2 rounded-lg shadow-md flex items-center gap-2 z-40">
+                    <div className="icon-loader-2 animate-spin text-sm"></div>
+                    <span className="text-sm">Фоновое обновление...</span>
+                </div>
+            )}
 
             <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
                 {syncError && (
