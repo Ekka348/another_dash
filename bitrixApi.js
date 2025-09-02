@@ -259,6 +259,45 @@ async function fetchLeadsCountByDay(startDate, endDate) {
     }
 }
 
+// Получение количества лидов по часам для каждого статуса
+async function fetchLeadsCountByHour(startDate, endDate) {
+    try {
+        // Получаем все лиды за период
+        const leads = await fetchBitrixLeads(startDate, endDate);
+        
+        // Инициализируем объект для хранения данных по часам
+        const hoursData = {};
+        
+        // Создаем записи для всех часов (00-23)
+        for (let i = 0; i < 24; i++) {
+            const hourKey = i.toString().padStart(2, '0');
+            hoursData[hourKey] = {
+                callback: 0,
+                approval: 0,
+                invited: 0
+            };
+        }
+        
+        // Заполняем данными
+        leads.forEach(lead => {
+            if (!lead.DATE_MODIFY) return;
+            
+            const modifyDate = new Date(lead.DATE_MODIFY);
+            const hourKey = modifyDate.getHours().toString().padStart(2, '0');
+            
+            if (hoursData[hourKey]) {
+                const status = mapStatusToStage(lead.STATUS_ID);
+                hoursData[hourKey][status]++;
+            }
+        });
+        
+        return hoursData;
+    } catch (error) {
+        console.error('Error fetching leads count by hour:', error);
+        throw error;
+    }
+}
+
 // Получение данных за текущую неделю
 async function fetchWeeklyLeadsData() {
     try {
@@ -276,6 +315,25 @@ async function fetchWeeklyLeadsData() {
         return await fetchLeadsCountByDay(startOfWeek, endOfWeek);
     } catch (error) {
         console.error('Error fetching weekly leads data:', error);
+        return {};
+    }
+}
+
+// Получение данных за текущий день
+async function fetchDailyLeadsData() {
+    try {
+        // Определяем даты начала и конца текущего дня
+        const today = new Date();
+        const startOfDay = new Date(today);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(today);
+        endOfDay.setHours(23, 59, 59, 999);
+        
+        // Получаем данные за день
+        return await fetchLeadsCountByHour(startOfDay, endOfDay);
+    } catch (error) {
+        console.error('Error fetching daily leads data:', error);
         return {};
     }
 }
@@ -338,6 +396,7 @@ if (typeof module !== 'undefined' && module.exports) {
         fetchBitrixLeads,
         fetchBitrixUsers,
         fetchWeeklyLeadsData,
+        fetchDailyLeadsData,
         formatDateForBitrix,
         formatDateForInput,
         formatDateTimeDisplay
