@@ -1,5 +1,8 @@
 // Синхронизация данных между Bitrix24 и приложением
 
+// Флаг для отслеживания фоновых запросов
+let isBackgroundSync = false;
+
 // Проверяем доступность зависимостей
 if (typeof fetchBitrixUsers === 'undefined') {
     console.error('Ошибка: fetchBitrixUsers не определен');
@@ -23,6 +26,12 @@ const EMPTY_OPERATORS_BY_STAGE = { callback: [], approval: [], invited: [] };
 
 async function syncWithBitrix24() {
     try {
+        if (isBackgroundSync) {
+            console.log('Фоновая синхронизация с Bitrix24...');
+        } else {
+            console.log('Синхронизация с Bitrix24...');
+        }
+        
         // Проверяем конфигурацию Bitrix24
         if (!loadBitrixConfig() || !isBitrixConfigured()) {
             console.warn('Bitrix24 не настроен, используются пустые данные');
@@ -42,20 +51,35 @@ async function syncWithBitrix24() {
         const startDate = window.currentStartDate || new Date();
         const endDate = window.currentEndDate || new Date();
 
-        console.log('Синхронизация данных с Bitrix24 за период:', 
-                   formatDateForInput(startDate), '-', formatDateForInput(endDate));
+        if (isBackgroundSync) {
+            console.log('Фоновая синхронизация за период:', formatDateForInput(startDate), '-', formatDateForInput(endDate));
+        } else {
+            console.log('Синхронизация за период:', formatDateForInput(startDate), '-', formatDateForInput(endDate));
+        }
 
         // Синхронизация операторов
         const operators = await fetchBitrixUsers();
-        console.log('Загружено операторов:', operators.length);
+        if (isBackgroundSync) {
+            console.log('Загружено операторов (фон):', operators.length);
+        } else {
+            console.log('Загружено операторов:', operators.length);
+        }
         
         // Синхронизация лидов
         const leads = await fetchBitrixLeads(startDate, endDate);
-        console.log('Загружено лидов:', leads.length);
+        if (isBackgroundSync) {
+            console.log('Загружено лидов (фон):', leads.length);
+        } else {
+            console.log('Загружено лидов:', leads.length);
+        }
 
         // Получаем данные за текущую неделю для графиков
         const weeklyLeads = await fetchWeeklyLeadsData();
-        console.log('Загружены данные за неделю:', weeklyLeads);
+        if (isBackgroundSync) {
+            console.log('Загружены данные за неделю (фон)');
+        } else {
+            console.log('Загружены данные за неделю:', weeklyLeads);
+        }
 
         // Обрабатываем данные для дашборда
         const processedData = processLeadsData(leads, operators);
@@ -68,7 +92,11 @@ async function syncWithBitrix24() {
         };
 
     } catch (error) {
-        console.error('Ошибка синхронизации с Bitrix24:', error);
+        if (isBackgroundSync) {
+            console.warn('Ошибка фоновой синхронизации:', error.message);
+        } else {
+            console.error('Ошибка синхронизации с Bitrix24:', error);
+        }
         // Возвращаем пустые данные в случае ошибки
         return {
             leads: [],
@@ -81,6 +109,16 @@ async function syncWithBitrix24() {
             error: error.message,
             errorType: error.name
         };
+    }
+}
+
+// Функция для фоновой синхронизации
+async function backgroundSyncWithBitrix24() {
+    isBackgroundSync = true;
+    try {
+        return await syncWithBitrix24();
+    } finally {
+        isBackgroundSync = false;
     }
 }
 
@@ -248,10 +286,31 @@ function getCurrentWeekDays() {
     return days;
 }
 
+// Вспомогательная функция для форматирования даты
+function formatDateForBitrix(date) {
+    if (!(date instanceof Date)) {
+        date = new Date(date);
+    }
+    if (isNaN(date.getTime())) {
+        throw new Error('Invalid date format');
+    }
+    
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+// Вспомогательная функция для форматирования даты в input
+function formatDateForInput(date) {
+    return formatDateForBitrix(date);
+}
+
 // Экспорт функций для использования в других модулях
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         syncWithBitrix24,
+        backgroundSyncWithBitrix24,
         processLeadsData,
         mapStatusToStage,
         calculateTrend,
@@ -259,6 +318,8 @@ if (typeof module !== 'undefined' && module.exports) {
         applyDateFilter,
         prepareWeeklyChartData,
         getCurrentWeekDays,
+        formatDateForBitrix,
+        formatDateForInput,
         EMPTY_LEADS_COUNT,
         EMPTY_OPERATORS_BY_STAGE
     };
