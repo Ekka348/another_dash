@@ -14,28 +14,6 @@ function DateFilter({ onApply, isLoading }) {
         onApply(start, end);
     };
 
-    const setToday = () => {
-        const today = new Date();
-        setStartDate(formatDateForInput(today));
-        setEndDate(formatDateForInput(today));
-    };
-
-    const setYesterday = () => {
-        const yesterday = new Date();
-        yesterday.setDate(yesterday.getDate() - 1);
-        setStartDate(formatDateForInput(yesterday));
-        setEndDate(formatDateForInput(yesterday));
-    };
-
-    const setThisWeek = () => {
-        const today = new Date();
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay() + (today.getDay() === 0 ? -6 : 1));
-        
-        setStartDate(formatDateForInput(startOfWeek));
-        setEndDate(formatDateForInput(today));
-    };
-
     return (
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-4">Фильтр по дате</h3>
@@ -66,30 +44,6 @@ function DateFilter({ onApply, isLoading }) {
                 </div>
                 
                 <div className="flex flex-col sm:flex-row gap-2 w-full lg:w-auto">
-                    <div className="flex gap-2 flex-wrap">
-                        <button
-                            onClick={setYesterday}
-                            disabled={isLoading}
-                            className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
-                        >
-                            Вчера
-                        </button>
-                        <button
-                            onClick={setToday}
-                            disabled={isLoading}
-                            className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
-                        >
-                            Сегодня
-                        </button>
-                        <button
-                            onClick={setThisWeek}
-                            disabled={isLoading}
-                            className="px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 disabled:opacity-50"
-                        >
-                            Эта неделя
-                        </button>
-                    </div>
-                    
                     <button
                         onClick={handleApply}
                         disabled={isLoading}
@@ -117,4 +71,12 @@ function DateFilter({ onApply, isLoading }) {
             )}
         </div>
     );
+}
+
+// Вспомогательная функция для форматирования даты
+function formatDateForInput(date) {
+    const year = date.getFullYear();
+    const month = (date.getMonth() + 1).toString().padStart(2, '0');
+    const day = date.getDate().toString().padStart(2, '0');
+    return `${year}-${month}-${day}`;
 }
