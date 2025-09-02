@@ -46,7 +46,16 @@ function App() {
     const [lastSync, setLastSync] = React.useState(null);
     const [showConfigModal, setShowConfigModal] = React.useState(false);
     const [syncError, setSyncError] = React.useState(null);
-    const [weeklyLeads, setWeeklyLeads] = React.useState({});
+    const [weeklyLeads, setWeeklyLeads] = React.useState({
+        callback: Array(7).fill(0),
+        approval: Array(7).fill(0),
+        invited: Array(7).fill(0)
+    });
+    const [dailyLeads, setDailyLeads] = React.useState({
+        callback: Array(24).fill(0),
+        approval: Array(24).fill(0),
+        invited: Array(24).fill(0)
+    });
     const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
     
     const stages = [
@@ -115,6 +124,18 @@ function App() {
                 });
             }
             
+            // Подготавливаем данные для дневного графика
+            if (dbData.dailyLeads) {
+                const preparedData = prepareDailyChartData(dbData.dailyLeads);
+                setDailyLeads(preparedData);
+            } else {
+                setDailyLeads({
+                    callback: Array(24).fill(0),
+                    approval: Array(24).fill(0),
+                    invited: Array(24).fill(0)
+                });
+            }
+            
             setLastSync(dbData.lastSync);
             
             if (dbData.error) {
@@ -132,6 +153,11 @@ function App() {
                 callback: Array(7).fill(0),
                 approval: Array(7).fill(0),
                 invited: Array(7).fill(0)
+            });
+            setDailyLeads({
+                callback: Array(24).fill(0),
+                approval: Array(24).fill(0),
+                invited: Array(24).fill(0)
             });
         } finally {
             setIsLoading(false);
@@ -178,6 +204,13 @@ function App() {
         }
         
         return days;
+    };
+
+    // Получение подписей для дневного графика
+    const getHourLabels = () => {
+        return Array.from({length: 24}, (_, i) => {
+            return `${i.toString().padStart(2, '0')}:00`;
+        });
     };
 
     return (
@@ -262,7 +295,7 @@ function App() {
                     />
                 </div>
 
-                {/* Общий контейнер для графиков */}
+                {/* Общий контейнер для графиков за неделю */}
                 <div className="dashboard-card mb-8">
                     <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
                     
@@ -295,6 +328,46 @@ function App() {
                                 type="line" 
                                 data={weeklyLeads.invited || Array(7).fill(0)}
                                 labels={getWeekDayLabels()}
+                                color="#10b981"
+                                title="Приглашен к рекрутеру"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Общий контейнер для графиков за день */}
+                <div className="dashboard-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* График для Перезвонить */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.callback || Array(24).fill(0)}
+                                labels={getHourLabels()}
+                                color="#2563eb"
+                                title="Перезвонить"
+                            />
+                        </div>
+                        
+                        {/* График для На согласовании */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.approval || Array(24).fill(0)}
+                                labels={getHourLabels()}
+                                color="#f59e0b"
+                                title="На согласовании"
+                            />
+                        </div>
+                        
+                        {/* График для Приглашены */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.invited || Array(24).fill(0)}
+                                labels={getHourLabels()}
                                 color="#10b981"
                                 title="Приглашен к рекрутеру"
                             />
