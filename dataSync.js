@@ -13,6 +13,9 @@ if (typeof fetchBitrixLeads === 'undefined') {
 if (typeof fetchWeeklyLeadsData === 'undefined') {
     console.error('Ошибка: fetchWeeklyLeadsData не определен');
 }
+if (typeof fetchDailyLeadsData === 'undefined') {
+    console.error('Ошибка: fetchDailyLeadsData не определен');
+}
 if (typeof loadBitrixConfig === 'undefined') {
     console.error('Ошибка: loadBitrixConfig не определен');
 }
@@ -41,6 +44,7 @@ async function syncWithBitrix24() {
                 leadsCount: EMPTY_LEADS_COUNT,
                 operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
                 weeklyLeads: {},
+                dailyLeads: {},
                 lastSync: null,
                 usingMockData: true,
                 error: 'Bitrix24 не настроен'
@@ -78,7 +82,15 @@ async function syncWithBitrix24() {
         if (isBackgroundSync) {
             console.log('Загружены данные за неделю (фон)');
         } else {
-            console.log('Загружены данные за неделю:', weeklyLeads);
+            console.log('Загружены данные за неделю');
+        }
+
+        // Получаем данные за текущий день для графиков
+        const dailyLeads = await fetchDailyLeadsData();
+        if (isBackgroundSync) {
+            console.log('Загружены данные за день (фон)');
+        } else {
+            console.log('Загружены данные за день');
         }
 
         // Обрабатываем данные для дашборда
@@ -87,6 +99,7 @@ async function syncWithBitrix24() {
         return {
             ...processedData,
             weeklyLeads,
+            dailyLeads,
             lastSync: new Date().toISOString(),
             usingMockData: false
         };
@@ -104,6 +117,7 @@ async function syncWithBitrix24() {
             leadsCount: EMPTY_LEADS_COUNT,
             operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
             weeklyLeads: {},
+            dailyLeads: {},
             lastSync: null,
             usingMockData: true,
             error: error.message,
@@ -270,6 +284,28 @@ function prepareWeeklyChartData(weeklyLeadsData) {
     return result;
 }
 
+// Подготовка данных для дневного графика
+function prepareDailyChartData(dailyLeadsData) {
+    const hours = Array.from({length: 24}, (_, i) => i);
+    const result = {
+        callback: Array(24).fill(0),
+        approval: Array(24).fill(0),
+        invited: Array(24).fill(0)
+    };
+    
+    // Заполняем данные для каждого часа
+    hours.forEach(hour => {
+        const hourKey = hour.toString().padStart(2, '0');
+        if (dailyLeadsData[hourKey]) {
+            result.callback[hour] = dailyLeadsData[hourKey].callback || 0;
+            result.approval[hour] = dailyLeadsData[hourKey].approval || 0;
+            result.invited[hour] = dailyLeadsData[hourKey].invited || 0;
+        }
+    });
+    
+    return result;
+}
+
 // Получение дней текущей недели
 function getCurrentWeekDays() {
     const days = [];
@@ -284,6 +320,13 @@ function getCurrentWeekDays() {
     }
     
     return days;
+}
+
+// Получение подписей часов для графика
+function getHourLabels() {
+    return Array.from({length: 24}, (_, i) => {
+        return `${i.toString().padStart(2, '0')}:00`;
+    });
 }
 
 // Вспомогательная функция для форматирования даты
@@ -317,7 +360,9 @@ if (typeof module !== 'undefined' && module.exports) {
         formatRelativeTime,
         applyDateFilter,
         prepareWeeklyChartData,
+        prepareDailyChartData,
         getCurrentWeekDays,
+        getHourLabels,
         formatDateForBitrix,
         formatDateForInput,
         EMPTY_LEADS_COUNT,
