@@ -1,4 +1,4 @@
-function SyncStatus({ lastSync, isLoading, onSync }) {
+function SyncStatus({ lastSync, isLoading, onSync, isAutoRefresh = false }) {
     try {
         const formatSyncTime = (timestamp) => {
             if (!timestamp) return 'Никогда';
@@ -34,6 +34,13 @@ function SyncStatus({ lastSync, isLoading, onSync }) {
                 <div className="text-xs text-gray-600">
                     Обновлено: {formatSyncTime(lastSync)}
                 </div>
+
+                {isAutoRefresh && (
+                    <div className="flex items-center gap-1 text-xs text-green-600">
+                        <div className="icon-clock text-sm"></div>
+                        <span>Автообновление</span>
+                    </div>
+                )}
             </div>
         );
     } catch (error) {
