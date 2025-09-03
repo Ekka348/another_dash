@@ -295,47 +295,7 @@ function App() {
                     />
                 </div>
 
-                {/* Общий контейнер для графиков за день (ПЕРВЫЙ) */}
-                <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день</h2>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        {/* График для Перезвонить */}
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={dailyLeads.callback || Array(24).fill(0)}
-                                labels={getHourLabels()}
-                                color="#2563eb"
-                                title="Перезвонить"
-                            />
-                        </div>
-                        
-                        {/* График для На согласовании */}
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={dailyLeads.approval || Array(24).fill(0)}
-                                labels={getHourLabels()}
-                                color="#f59e0b"
-                                title="На согласовании"
-                            />
-                        </div>
-                        
-                        {/* График для Приглашены */}
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={dailyLeads.invited || Array(24).fill(0)}
-                                labels={getHourLabels()}
-                                color="#10b981"
-                                title="Приглашен к рекрутеру"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Общий контейнер для графиков за неделю (ВТОРОЙ) */}
+                {/* Общий контейнер для графиков за неделю */}
                 <div className="dashboard-card mb-8">
                     <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
                     
@@ -368,6 +328,46 @@ function App() {
                                 type="line" 
                                 data={weeklyLeads.invited || Array(7).fill(0)}
                                 labels={getWeekDayLabels()}
+                                color="#10b981"
+                                title="Приглашен к рекрутеру"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Общий контейнер для графиков за день */}
+                <div className="dashboard-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {/* График для Перезвонить */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.callback || Array(24).fill(0)}
+                                labels={getHourLabels()}
+                                color="#2563eb"
+                                title="Перезвонить"
+                            />
+                        </div>
+                        
+                        {/* График для На согласовании */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.approval || Array(24).fill(0)}
+                                labels={getHourLabels()}
+                                color="#f59e0b"
+                                title="На согласовании"
+                            />
+                        </div>
+                        
+                        {/* График для Приглашены */}
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.invited || Array(24).fill(0)}
+                                labels={getHourLabels()}
                                 color="#10b981"
                                 title="Приглашен к рекрутеру"
                             />
@@ -415,7 +415,7 @@ function App() {
                                 operators={operatorsData[stage.id] || []} 
                             />
                         ))
-                    ) else (
+                    ) : (
                         <OperatorTable 
                             stage={stages.find(s => s.id === selectedStage)} 
                             operators={operatorsData[selectedStage] || []}
