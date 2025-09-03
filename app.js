@@ -53,9 +53,14 @@ function App() {
         invited: Array(7).fill(0)
     });
     const [dailyLeads, setDailyLeads] = React.useState({
-        callback: Array(13).fill(0), // 8:00-20:00 (13 часов)
+        callback: Array(13).fill(0),
         approval: Array(13).fill(0),
         invited: Array(13).fill(0)
+    });
+    const [monthlyWeeksLeads, setMonthlyWeeksLeads] = React.useState({
+        callback: Array(4).fill(0),
+        approval: Array(4).fill(0),
+        invited: Array(4).fill(0)
     });
     const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
     
@@ -131,6 +136,10 @@ function App() {
                 });
             }
             
+            // Загружаем данные по неделям месяца
+            const monthlyData = await fetchMonthlyWeeksData();
+            setMonthlyWeeksLeads(monthlyData);
+            
             setLastSync(dbData.lastSync);
             
             if (dbData.error) {
@@ -153,9 +162,73 @@ function App() {
                 approval: Array(13).fill(0),
                 invited: Array(13).fill(0)
             });
+            setMonthlyWeeksLeads({
+                callback: Array(4).fill(0),
+                approval: Array(4).fill(0),
+                invited: Array(4).fill(0)
+            });
         } finally {
             setIsLoading(false);
             setIsBackgroundLoading(false);
+        }
+    };
+
+    const fetchMonthlyWeeksData = async () => {
+        try {
+            const today = new Date();
+            const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+            const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+            
+            // Определяем даты для 4 недель месяца
+            const weeks = [
+                {
+                    start: new Date(firstDayOfMonth),
+                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 7)
+                },
+                {
+                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 8),
+                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 14)
+                },
+                {
+                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 15),
+                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 21)
+                },
+                {
+                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 22),
+                    end: new Date(lastDayOfMonth)
+                }
+            ];
+            
+            const monthlyData = {
+                callback: Array(4).fill(0),
+                approval: Array(4).fill(0),
+                invited: Array(4).fill(0)
+            };
+            
+            // Для каждой недели получаем данные
+            for (let i = 0; i < weeks.length; i++) {
+                const week = weeks[i];
+                window.currentStartDate = week.start;
+                window.currentEndDate = week.end;
+                
+                const weekData = await syncWithBitrix24();
+                
+                if (weekData.leadsCount) {
+                    monthlyData.callback[i] = weekData.leadsCount.callback || 0;
+                    monthlyData.approval[i] = weekData.leadsCount.approval || 0;
+                    monthlyData.invited[i] = weekData.leadsCount.invited || 0;
+                }
+            }
+            
+            return monthlyData;
+            
+        } catch (error) {
+            console.error('Error fetching monthly weeks data:', error);
+            return {
+                callback: Array(4).fill(0),
+                approval: Array(4).fill(0),
+                invited: Array(4).fill(0)
+            };
         }
     };
 
@@ -201,9 +274,13 @@ function App() {
 
     const getHourLabels = () => {
         return Array.from({length: 13}, (_, i) => {
-            const hour = i + 8; // Начинаем с 8:00
+            const hour = i + 8;
             return `${hour.toString().padStart(2, '0')}:00`;
         });
+    };
+
+    const getWeeklyLabels = () => {
+        return ['1-я неделя', '2-я неделя', '3-я неделя', '4-я неделя'];
     };
 
     const prepareWeeklyChartData = (weeklyLeadsData) => {
@@ -227,12 +304,11 @@ function App() {
 
     const prepareDailyChartData = (dailyLeadsData) => {
         const result = {
-            callback: Array(13).fill(0), // 8:00-20:00 (13 часов)
+            callback: Array(13).fill(0),
             approval: Array(13).fill(0),
             invited: Array(13).fill(0)
         };
         
-        // Заполняем данные только для часов с 8:00 до 20:00
         for (let hour = 8; hour <= 20; hour++) {
             const hourKey = hour.toString().padStart(2, '0');
             const index = hour - 8;
@@ -414,6 +490,43 @@ function App() {
                                 type="line" 
                                 data={weeklyLeads.invited || Array(7).fill(0)}
                                 labels={getWeekDayLabels()}
+                                color="#10b981"
+                                title="Приглашен к рекрутеру"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Сравнение данных по неделям месяца */}
+                <div className="dashboard-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Сравнение данных по неделям</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="bar" 
+                                data={monthlyWeeksLeads.callback || Array(4).fill(0)}
+                                labels={getWeeklyLabels()}
+                                color="#2563eb"
+                                title="Перезвонить"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="bar" 
+                                data={monthlyWeeksLeads.approval || Array(4).fill(0)}
+                                labels={getWeeklyLabels()}
+                                color="#f59e0b"
+                                title="На согласовании"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="bar" 
+                                data={monthlyWeeksLeads.invited || Array(4).fill(0)}
+                                labels={getWeeklyLabels()}
                                 color="#10b981"
                                 title="Приглашен к рекрутеру"
                             />
