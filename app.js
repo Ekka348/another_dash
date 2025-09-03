@@ -208,6 +208,12 @@ function App() {
             // Для каждой недели получаем данные
             for (let i = 0; i < weeks.length; i++) {
                 const week = weeks[i];
+                
+                // Сохраняем текущие даты чтобы восстановить после
+                const originalStartDate = window.currentStartDate;
+                const originalEndDate = window.currentEndDate;
+                
+                // Устанавливаем даты для текущей недели
                 window.currentStartDate = week.start;
                 window.currentEndDate = week.end;
                 
@@ -218,6 +224,10 @@ function App() {
                     monthlyData.approval[i] = weekData.leadsCount.approval || 0;
                     monthlyData.invited[i] = weekData.leadsCount.invited || 0;
                 }
+                
+                // Восстанавливаем оригинальные даты
+                window.currentStartDate = originalStartDate;
+                window.currentEndDate = originalEndDate;
             }
             
             return monthlyData;
@@ -503,8 +513,7 @@ function App() {
                     
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="dashboard-card">
-                            <LeadsChart 
-                                type="bar" 
+                            <WeeklyComparisonChart 
                                 data={monthlyWeeksLeads.callback || Array(4).fill(0)}
                                 labels={getWeeklyLabels()}
                                 color="#2563eb"
@@ -513,8 +522,7 @@ function App() {
                         </div>
                         
                         <div className="dashboard-card">
-                            <LeadsChart 
-                                type="bar" 
+                            <WeeklyComparisonChart 
                                 data={monthlyWeeksLeads.approval || Array(4).fill(0)}
                                 labels={getWeeklyLabels()}
                                 color="#f59e0b"
@@ -523,8 +531,7 @@ function App() {
                         </div>
                         
                         <div className="dashboard-card">
-                            <LeadsChart 
-                                type="bar" 
+                            <WeeklyComparisonChart 
                                 data={monthlyWeeksLeads.invited || Array(4).fill(0)}
                                 labels={getWeeklyLabels()}
                                 color="#10b981"
@@ -595,6 +602,107 @@ function App() {
                     </div>
                 </div>
             )}
+        </div>
+    );
+}
+
+// Новый компонент для столбчатых графиков сравнения по неделям
+function WeeklyComparisonChart({ data, labels, color, title }) {
+    const chartRef = React.useRef(null);
+    const chartInstance = React.useRef(null);
+
+    const isEmptyData = !data || data.length === 0 || data.every(val => val === 0);
+
+    React.useEffect(() => {
+        if (!chartRef.current || isEmptyData) return;
+
+        const ctx = chartRef.current.getContext('2d');
+        
+        if (chartInstance.current) {
+            chartInstance.current.destroy();
+        }
+
+        const config = {
+            type: 'bar',
+            data: {
+                labels: labels || ['1-я неделя', '2-я неделя', '3-я неделя', '4-я неделя'],
+                datasets: [
+                    {
+                        label: title,
+                        data: data,
+                        backgroundColor: color,
+                        borderColor: color,
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        hoverBackgroundColor: color + 'CC'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.parsed.y}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        },
+                        ticks: {
+                            stepSize: Math.max(1, Math.floor(Math.max(...data) / 5)) || 1
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                }
+            }
+        };
+
+        chartInstance.current = new ChartJS(ctx, config);
+
+        return () => {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+        };
+    }, [data, labels, color, title, isEmptyData]);
+
+    if (isEmptyData) {
+        return (
+            <div className="h-48 flex items-center justify-center">
+                <div className="text-gray-500 text-center">
+                    <div className="icon-bar-chart-3 text-3xl mb-2 opacity-50"></div>
+                    <p>Нет данных</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-48" data-name="weekly-comparison-chart">
+            <canvas ref={chartRef}></canvas>
         </div>
     );
 }
