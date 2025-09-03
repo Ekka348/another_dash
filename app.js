@@ -53,9 +53,9 @@ function App() {
         invited: Array(7).fill(0)
     });
     const [dailyLeads, setDailyLeads] = React.useState({
-        callback: Array(24).fill(0),
-        approval: Array(24).fill(0),
-        invited: Array(24).fill(0)
+        callback: Array(13).fill(0), // 8:00-20:00 (13 часов)
+        approval: Array(13).fill(0),
+        invited: Array(13).fill(0)
     });
     const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
     
@@ -125,9 +125,9 @@ function App() {
                 setDailyLeads(preparedData);
             } else {
                 setDailyLeads({
-                    callback: Array(24).fill(0),
-                    approval: Array(24).fill(0),
-                    invited: Array(24).fill(0)
+                    callback: Array(13).fill(0),
+                    approval: Array(13).fill(0),
+                    invited: Array(13).fill(0)
                 });
             }
             
@@ -149,9 +149,9 @@ function App() {
                 invited: Array(7).fill(0)
             });
             setDailyLeads({
-                callback: Array(24).fill(0),
-                approval: Array(24).fill(0),
-                invited: Array(24).fill(0)
+                callback: Array(13).fill(0),
+                approval: Array(13).fill(0),
+                invited: Array(13).fill(0)
             });
         } finally {
             setIsLoading(false);
@@ -200,8 +200,9 @@ function App() {
     };
 
     const getHourLabels = () => {
-        return Array.from({length: 24}, (_, i) => {
-            return `${i.toString().padStart(2, '0')}:00`;
+        return Array.from({length: 13}, (_, i) => {
+            const hour = i + 8; // Начинаем с 8:00
+            return `${hour.toString().padStart(2, '0')}:00`;
         });
     };
 
@@ -225,21 +226,23 @@ function App() {
     };
 
     const prepareDailyChartData = (dailyLeadsData) => {
-        const hours = Array.from({length: 24}, (_, i) => i);
         const result = {
-            callback: Array(24).fill(0),
-            approval: Array(24).fill(0),
-            invited: Array(24).fill(0)
+            callback: Array(13).fill(0), // 8:00-20:00 (13 часов)
+            approval: Array(13).fill(0),
+            invited: Array(13).fill(0)
         };
         
-        hours.forEach(hour => {
+        // Заполняем данные только для часов с 8:00 до 20:00
+        for (let hour = 8; hour <= 20; hour++) {
             const hourKey = hour.toString().padStart(2, '0');
+            const index = hour - 8;
+            
             if (dailyLeadsData[hourKey]) {
-                result.callback[hour] = dailyLeadsData[hourKey].callback || 0;
-                result.approval[hour] = dailyLeadsData[hourKey].approval || 0;
-                result.invited[hour] = dailyLeadsData[hourKey].invited || 0;
+                result.callback[index] = dailyLeadsData[hourKey].callback || 0;
+                result.approval[index] = dailyLeadsData[hourKey].approval || 0;
+                result.invited[index] = dailyLeadsData[hourKey].invited || 0;
             }
-        });
+        }
         
         return result;
     };
@@ -344,15 +347,15 @@ function App() {
                     />
                 </div>
 
-                {/* Графики за текущий день (ПЕРВЫЕ) */}
+                {/* Графики за текущий день (8:00-20:00) */}
                 <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день</h2>
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день (8:00-20:00)</h2>
                     
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="dashboard-card">
                             <LeadsChart 
                                 type="line" 
-                                data={dailyLeads.callback || Array(24).fill(0)}
+                                data={dailyLeads.callback || Array(13).fill(0)}
                                 labels={getHourLabels()}
                                 color="#2563eb"
                                 title="Перезвонить"
@@ -362,7 +365,7 @@ function App() {
                         <div className="dashboard-card">
                             <LeadsChart 
                                 type="line" 
-                                data={dailyLeads.approval || Array(24).fill(0)}
+                                data={dailyLeads.approval || Array(13).fill(0)}
                                 labels={getHourLabels()}
                                 color="#f59e0b"
                                 title="На согласовании"
@@ -372,7 +375,7 @@ function App() {
                         <div className="dashboard-card">
                             <LeadsChart 
                                 type="line" 
-                                data={dailyLeads.invited || Array(24).fill(0)}
+                                data={dailyLeads.invited || Array(13).fill(0)}
                                 labels={getHourLabels()}
                                 color="#10b981"
                                 title="Приглашен к рекрутеру"
@@ -381,7 +384,7 @@ function App() {
                     </div>
                 </div>
 
-                {/* Графики за текущую неделю (ВТОРЫЕ) */}
+                {/* Графики за текущую неделю */}
                 <div className="dashboard-card mb-8">
                     <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
                     
