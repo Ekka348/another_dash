@@ -40,10 +40,8 @@ class ErrorBoundary extends React.Component {
 
 function App() {
     const [selectedStage, setSelectedStage] = React.useState('all');
-    const [selectedOperator, setSelectedOperator] = React.useState(null);
     const [leadsData, setLeadsData] = React.useState({ callback: 0, approval: 0, invited: 0 });
     const [operatorsData, setOperatorsData] = React.useState({ callback: [], approval: [], invited: [] });
-    const [allOperators, setAllOperators] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(false);
     const [isBackgroundLoading, setIsBackgroundLoading] = React.useState(false);
     const [lastSync, setLastSync] = React.useState(null);
@@ -115,7 +113,6 @@ function App() {
             
             setLeadsData(dbData.leadsCount || { callback: 0, approval: 0, invited: 0 });
             setOperatorsData(dbData.operatorsByStage || { callback: [], approval: [], invited: [] });
-            setAllOperators(dbData.operators || []);
             
             if (dbData.weeklyLeads) {
                 const preparedData = prepareWeeklyChartData(dbData.weeklyLeads);
@@ -155,7 +152,6 @@ function App() {
             
             setLeadsData({ callback: 0, approval: 0, invited: 0 });
             setOperatorsData({ callback: [], approval: [], invited: [] });
-            setAllOperators([]);
             setWeeklyLeads({
                 callback: Array(7).fill(0),
                 approval: Array(7).fill(0),
@@ -177,159 +173,30 @@ function App() {
         }
     };
 
-    const loadOperatorData = async (operatorId) => {
-        try {
-            setIsLoading(true);
-            setSyncError(null);
-            
-            if (!operatorId) {
-                // Сброс фильтра - загружаем все данные
-                await loadDataFromDatabase();
-                return;
-            }
-
-            // Загружаем данные только для выбранного оператора
-            const operatorData = await fetchOperatorSpecificData(operatorId);
-            
-            setLeadsData(operatorData.leadsCount || { callback: 0, approval: 0, invited: 0 });
-            setWeeklyLeads(operatorData.weeklyLeads || {
-                callback: Array(7).fill(0),
-                approval: Array(7).fill(0),
-                invited: Array(7).fill(0)
-            });
-            setDailyLeads(operatorData.dailyLeads || {
-                callback: Array(13).fill(0),
-                approval: Array(13).fill(0),
-                invited: Array(13).fill(0)
-            });
-            setMonthlyWeeksLeads(operatorData.monthlyWeeksLeads || {
-                callback: Array(4).fill(0),
-                approval: Array(4).fill(0),
-                invited: Array(4).fill(0)
-            });
-            
-        } catch (error) {
-            console.error('Error loading operator data:', error);
-            setSyncError(error.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
-    const fetchOperatorSpecificData = async (operatorId) => {
-        try {
-            // Сохраняем оригинальные даты
-            const originalStartDate = window.currentStartDate;
-            const originalEndDate = window.currentEndDate;
-            
-            // Получаем данные для оператора
-            const operatorLeads = await fetchBitrixLeadsForOperator(operatorId, originalStartDate, originalEndDate);
-            
-            // Обрабатываем данные для графиков
-            const processedData = processLeadsData(operatorLeads, allOperators);
-            
-            // Получаем данные за неделю для оператора
-            const weeklyData = await fetchWeeklyLeadsDataForOperator(operatorId);
-            
-            // Получаем данные за день для оператора
-            const dailyData = await fetchDailyLeadsDataForOperator(operatorId);
-            
-            // Получаем данные по неделям месяца для оператора
-            const monthlyData = await fetchMonthlyWeeksDataForOperator(operatorId);
-            
-            return {
-                leadsCount: processedData.leadsCount,
-                weeklyLeads: weeklyData,
-                dailyLeads: dailyData,
-                monthlyWeeksLeads: monthlyData
-            };
-            
-        } catch (error) {
-            console.error('Error fetching operator specific data:', error);
-            throw error;
-        }
-    };
-
-    const fetchBitrixLeadsForOperator = async (operatorId, startDate, endDate) => {
-        try {
-            const leads = await bitrixApiCall('crm.lead.list', {
-                select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_MODIFY', 'DATE_CREATE'],
-                filter: {
-                    'STATUS_ID': Object.keys(STATUS_MAP),
-                    'ASSIGNED_BY_ID': operatorId,
-                    '>=DATE_MODIFY': `${formatDateForBitrix(startDate)} 00:00:00`,
-                    '<=DATE_MODIFY': `${formatDateForBitrix(endDate)} 23:59:59`
-                },
-                order: { "DATE_MODIFY": "ASC" }
-            });
-
-            return leads.map(lead => ({
-                ID: lead.ID,
-                TITLE: lead.TITLE || `Лид #${lead.ID}`,
-                STATUS_ID: lead.STATUS_ID,
-                ASSIGNED_BY_ID: lead.ASSIGNED_BY_ID,
-                DATE_MODIFY: lead.DATE_MODIFY,
-                DATE_CREATE: lead.DATE_CREATE
-            }));
-        } catch (error) {
-            console.error('Error fetching operator leads:', error);
-            return [];
-        }
-    };
-
-    const fetchWeeklyLeadsDataForOperator = async (operatorId) => {
-        try {
-            const today = new Date();
-            const startOfWeek = new Date(today);
-            startOfWeek.setDate(today.getDate() - today.getDay() + 1);
-            
-            const endOfWeek = new Date(startOfWeek);
-            endOfWeek.setDate(startOfWeek.getDate() + 6);
-            
-            const leads = await fetchBitrixLeadsForOperator(operatorId, startOfWeek, endOfWeek);
-            return prepareWeeklyChartDataForOperator(leads, startOfWeek, endOfWeek);
-        } catch (error) {
-            console.error('Error fetching weekly data for operator:', error);
-            return {
-                callback: Array(7).fill(0),
-                approval: Array(7).fill(0),
-                invited: Array(7).fill(0)
-            };
-        }
-    };
-
-    const fetchDailyLeadsDataForOperator = async (operatorId) => {
-        try {
-            const today = new Date();
-            const startOfDay = new Date(today);
-            startOfDay.setHours(0, 0, 0, 0);
-            
-            const endOfDay = new Date(today);
-            endOfDay.setHours(23, 59, 59, 999);
-            
-            const leads = await fetchBitrixLeadsForOperator(operatorId, startOfDay, endOfDay);
-            return prepareDailyChartDataForOperator(leads);
-        } catch (error) {
-            console.error('Error fetching daily data for operator:', error);
-            return {
-                callback: Array(13).fill(0),
-                approval: Array(13).fill(0),
-                invited: Array(13).fill(0)
-            };
-        }
-    };
-
-    const fetchMonthlyWeeksDataForOperator = async (operatorId) => {
+    const fetchMonthlyWeeksData = async () => {
         try {
             const today = new Date();
             const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
             
+            // Определяем даты для 4 недель месяца
             const weeks = [
-                { start: new Date(firstDayOfMonth), end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 7) },
-                { start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 8), end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 14) },
-                { start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 15), end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 21) },
-                { start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 22), end: new Date(lastDayOfMonth) }
+                {
+                    start: new Date(firstDayOfMonth),
+                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 7)
+                },
+                {
+                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 8),
+                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 14)
+                },
+                {
+                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 15),
+                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 21)
+                },
+                {
+                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 22),
+                    end: new Date(lastDayOfMonth)
+                }
             ];
             
             const monthlyData = {
@@ -338,83 +205,41 @@ function App() {
                 invited: Array(4).fill(0)
             };
             
+            // Для каждой недели получаем данные
             for (let i = 0; i < weeks.length; i++) {
                 const week = weeks[i];
-                const leads = await fetchBitrixLeadsForOperator(operatorId, week.start, week.end);
                 
-                const weekData = processLeadsData(leads, allOperators);
-                monthlyData.callback[i] = weekData.leadsCount.callback || 0;
-                monthlyData.approval[i] = weekData.leadsCount.approval || 0;
-                monthlyData.invited[i] = weekData.leadsCount.invited || 0;
+                // Сохраняем текущие даты чтобы восстановить после
+                const originalStartDate = window.currentStartDate;
+                const originalEndDate = window.currentEndDate;
+                
+                // Устанавливаем даты для текущей недели
+                window.currentStartDate = week.start;
+                window.currentEndDate = week.end;
+                
+                const weekData = await syncWithBitrix24();
+                
+                if (weekData.leadsCount) {
+                    monthlyData.callback[i] = weekData.leadsCount.callback || 0;
+                    monthlyData.approval[i] = weekData.leadsCount.approval || 0;
+                    monthlyData.invited[i] = weekData.leadsCount.invited || 0;
+                }
+                
+                // Восстанавливаем оригинальные даты
+                window.currentStartDate = originalStartDate;
+                window.currentEndDate = originalEndDate;
             }
             
             return monthlyData;
             
         } catch (error) {
-            console.error('Error fetching monthly weeks data for operator:', error);
+            console.error('Error fetching monthly weeks data:', error);
             return {
                 callback: Array(4).fill(0),
                 approval: Array(4).fill(0),
                 invited: Array(4).fill(0)
             };
         }
-    };
-
-    const prepareWeeklyChartDataForOperator = (leads, startOfWeek, endOfWeek) => {
-        const result = {
-            callback: Array(7).fill(0),
-            approval: Array(7).fill(0),
-            invited: Array(7).fill(0)
-        };
-        
-        const currentDate = new Date(startOfWeek);
-        
-        while (currentDate <= endOfWeek) {
-            const dayKey = formatDateForBitrix(new Date(currentDate));
-            const dayIndex = Math.floor((currentDate - startOfWeek) / (1000 * 60 * 60 * 24));
-            
-            leads.forEach(lead => {
-                if (!lead.DATE_MODIFY) return;
-                
-                const modifyDate = new Date(lead.DATE_MODIFY);
-                const modifyDayKey = formatDateForBitrix(modifyDate);
-                
-                if (modifyDayKey === dayKey) {
-                    const status = mapStatusToStage(lead.STATUS_ID);
-                    result[status][dayIndex]++;
-                }
-            });
-            
-            currentDate.setDate(currentDate.getDate() + 1);
-        }
-        
-        return result;
-    };
-
-    const prepareDailyChartDataForOperator = (leads) => {
-        const result = {
-            callback: Array(13).fill(0),
-            approval: Array(13).fill(0),
-            invited: Array(13).fill(0)
-        };
-        
-        leads.forEach(lead => {
-            if (!lead.DATE_MODIFY) return;
-            
-            const modifyDate = new Date(lead.DATE_MODIFY);
-            const hour = modifyDate.getHours();
-            
-            if (hour >= 8 && hour <= 20) {
-                const status = mapStatusToStage(lead.STATUS_ID);
-                result[status][hour - 8]++;
-            }
-        });
-        
-        return result;
-    };
-
-    const fetchMonthlyWeeksData = async () => {
-        // ... существующий код без изменений ...
     };
 
     const handleSync = async () => {
@@ -435,53 +260,99 @@ function App() {
             setIsLoading(true);
             window.currentStartDate = startDate;
             window.currentEndDate = endDate;
-            
-            if (selectedOperator) {
-                await loadOperatorData(selectedOperator);
-            } else {
-                await loadDataFromDatabase();
-            }
+            await loadDataFromDatabase();
         } catch (error) {
             console.error('Date filter error:', error);
             setSyncError(error.message);
         }
     };
 
-    const handleOperatorChange = (operatorId) => {
-        setSelectedOperator(operatorId);
-        if (operatorId) {
-            loadOperatorData(operatorId);
-        } else {
-            loadDataFromDatabase();
-        }
-    };
-
     const getWeekDayLabels = () => {
-        // ... существующий код без изменений ...
+        const days = [];
+        const today = new Date();
+        const firstDayOfWeek = new Date(today);
+        firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
+        
+        for (let i = 0; i < 7; i++) {
+            const day = new Date(firstDayOfWeek);
+            day.setDate(firstDayOfWeek.getDate() + i);
+            days.push(day.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' }));
+        }
+        
+        return days;
     };
 
     const getHourLabels = () => {
-        // ... существующий код без изменений ...
+        return Array.from({length: 13}, (_, i) => {
+            const hour = i + 8;
+            return `${hour.toString().padStart(2, '0')}:00`;
+        });
     };
 
     const getWeeklyLabels = () => {
-        // ... существующий код без изменений ...
+        return ['1-я неделя', '2-я неделя', '3-я неделя', '4-я неделя'];
     };
 
     const prepareWeeklyChartData = (weeklyLeadsData) => {
-        // ... существующий код без изменений ...
+        const daysOrder = getCurrentWeekDays();
+        const result = {
+            callback: Array(7).fill(0),
+            approval: Array(7).fill(0),
+            invited: Array(7).fill(0)
+        };
+        
+        daysOrder.forEach((day, index) => {
+            if (weeklyLeadsData[day]) {
+                result.callback[index] = weeklyLeadsData[day].callback || 0;
+                result.approval[index] = weeklyLeadsData[day].approval || 0;
+                result.invited[index] = weeklyLeadsData[day].invited || 0;
+            }
+        });
+        
+        return result;
     };
 
     const prepareDailyChartData = (dailyLeadsData) => {
-        // ... существующий код без изменений ...
+        const result = {
+            callback: Array(13).fill(0),
+            approval: Array(13).fill(0),
+            invited: Array(13).fill(0)
+        };
+        
+        for (let hour = 8; hour <= 20; hour++) {
+            const hourKey = hour.toString().padStart(2, '0');
+            const index = hour - 8;
+            
+            if (dailyLeadsData[hourKey]) {
+                result.callback[index] = dailyLeadsData[hourKey].callback || 0;
+                result.approval[index] = dailyLeadsData[hourKey].approval || 0;
+                result.invited[index] = dailyLeadsData[hourKey].invited || 0;
+            }
+        }
+        
+        return result;
     };
 
     const getCurrentWeekDays = () => {
-        // ... существующий код без изменений ...
+        const days = [];
+        const today = new Date();
+        const firstDayOfWeek = new Date(today);
+        firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
+        
+        for (let i = 0; i < 7; i++) {
+            const day = new Date(firstDayOfWeek);
+            day.setDate(firstDayOfWeek.getDate() + i);
+            days.push(formatDateForBitrix(day));
+        }
+        
+        return days;
     };
 
     const formatDateForBitrix = (date) => {
-        // ... существующий код без изменений ...
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        return `${year}-${month}-${day}`;
     };
 
     return (
@@ -538,53 +409,6 @@ function App() {
 
                 <DateFilter onApply={handleDateFilterApply} isLoading={isLoading} />
 
-                {/* Селектор выбора оператора */}
-                <div className="mb-6">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                        <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
-                                Выберите оператора
-                            </label>
-                            <div className="flex gap-2">
-                                <select
-                                    value={selectedOperator || ''}
-                                    onChange={(e) => handleOperatorChange(e.target.value || null)}
-                                    className="flex-1 p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    disabled={isLoading}
-                                >
-                                    <option value="">Все операторы</option>
-                                    {allOperators.map(operator => (
-                                        <option key={operator.ID} value={operator.ID}>
-                                            {operator.FULL_NAME} ({operator.DEPARTMENT})
-                                        </option>
-                                    ))}
-                                </select>
-                                {selectedOperator && (
-                                    <button
-                                        onClick={() => handleOperatorChange(null)}
-                                        className="px-4 py-2 bg-gray-500 text-white rounded-lg hover:bg-gray-600 transition-colors flex items-center gap-2"
-                                        disabled={isLoading}
-                                    >
-                                        <div className="icon-x text-sm"></div>
-                                        Сбросить
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {selectedOperator && (
-                    <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                        <div className="flex items-center gap-2">
-                            <div className="icon-user text-blue-600"></div>
-                            <span className="text-blue-800 font-medium">
-                                Показаны данные для: {allOperators.find(op => op.ID == selectedOperator)?.FULL_NAME}
-                            </span>
-                        </div>
-                    </div>
-                )}
-
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <MetricCard 
                         title="Перезвонить"
@@ -609,14 +433,283 @@ function App() {
                     />
                 </div>
 
-                {/* Остальные графики остаются без изменений */}
-                {/* ... существующий код графиков ... */}
+                {/* Графики за текущий день (8:00-20:00) */}
+                <div className="dashboard-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день (8:00-20:00)</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.callback || Array(13).fill(0)}
+                                labels={getHourLabels()}
+                                color="#2563eb"
+                                title="Перезвонить"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.approval || Array(13).fill(0)}
+                                labels={getHourLabels()}
+                                color="#f59e0b"
+                                title="На согласовании"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.invited || Array(13).fill(0)}
+                                labels={getHourLabels()}
+                                color="#10b981"
+                                title="Приглашен к рекрутеру"
+                            />
+                        </div>
+                    </div>
+                </div>
 
+                {/* Графики за текущую неделю */}
+                <div className="dashboard-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={weeklyLeads.callback || Array(7).fill(0)}
+                                labels={getWeekDayLabels()}
+                                color="#2563eb"
+                                title="Перезвонить"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={weeklyLeads.approval || Array(7).fill(0)}
+                                labels={getWeekDayLabels()}
+                                color="#f59e0b"
+                                title="На согласовании"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={weeklyLeads.invited || Array(7).fill(0)}
+                                labels={getWeekDayLabels()}
+                                color="#10b981"
+                                title="Приглашен к рекрутеру"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                {/* Сравнение данных по неделям месяца */}
+                <div className="dashboard-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Сравнение данных по неделям</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="dashboard-card">
+                            <WeeklyComparisonChart 
+                                data={monthlyWeeksLeads.callback || Array(4).fill(0)}
+                                labels={getWeeklyLabels()}
+                                color="#2563eb"
+                                title="Перезвонить"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <WeeklyComparisonChart 
+                                data={monthlyWeeksLeads.approval || Array(4).fill(0)}
+                                labels={getWeeklyLabels()}
+                                color="#f59e0b"
+                                title="На согласовании"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <WeeklyComparisonChart 
+                                data={monthlyWeeksLeads.invited || Array(4).fill(0)}
+                                labels={getWeeklyLabels()}
+                                color="#10b981"
+                                title="Приглашен к рекрутеру"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mb-6">
+                    <h3 className="text-lg font-semibold mb-3 text-gray-900">Фильтр по стадиям</h3>
+                    <div className="flex flex-wrap gap-2">
+                        <button
+                            onClick={() => setSelectedStage('all')}
+                            className={`px-4 py-2 rounded-lg border transition-colors ${
+                                selectedStage === 'all' 
+                                    ? 'bg-blue-500 text-white border-blue-500'
+                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                            }`}
+                        >
+                            Все стадии
+                        </button>
+                        {stages.map(stage => (
+                            <button
+                                key={stage.id}
+                                onClick={() => setSelectedStage(stage.id)}
+                                className={`px-4 py-2 rounded-lg border transition-colors ${
+                                    selectedStage === stage.id 
+                                        ? 'bg-blue-500 text-white border-blue-500'
+                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                                }`}
+                            >
+                                {stage.name}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="space-y-6">
+                    {selectedStage === 'all' ? (
+                        stages.map(stage => (
+                            <OperatorTable 
+                                key={stage.id} 
+                                stage={stage} 
+                                operators={operatorsData[stage.id] || []} 
+                            />
+                        ))
+                    ) : (
+                        <OperatorTable 
+                            stage={stages.find(s => s.id === selectedStage)} 
+                            operators={operatorsData[selectedStage] || []}
+                        />
+                    )}
+                </div>
             </main>
 
-            {/* Остальной код без изменений */}
+            <BitrixConfigModal
+                isOpen={showConfigModal}
+                onClose={() => setShowConfigModal(false)}
+                onSave={handleConfigSave}
+            />
+
+            {isLoading && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-6 flex items-center gap-3">
+                        <div className="icon-loader-2 animate-spin text-blue-500"></div>
+                        <span>Загрузка данных...</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
 
-// Остальные компоненты без изменений
+// Новый компонент для столбчатых графиков сравнения по неделям
+function WeeklyComparisonChart({ data, labels, color, title }) {
+    const chartRef = React.useRef(null);
+    const chartInstance = React.useRef(null);
+
+    const isEmptyData = !data || data.length === 0 || data.every(val => val === 0);
+
+    React.useEffect(() => {
+        if (!chartRef.current || isEmptyData) return;
+
+        const ctx = chartRef.current.getContext('2d');
+        
+        if (chartInstance.current) {
+            chartInstance.current.destroy();
+        }
+
+        const config = {
+            type: 'bar',
+            data: {
+                labels: labels || ['1-я неделя', '2-я неделя', '3-я неделя', '4-я неделя'],
+                datasets: [
+                    {
+                        label: title,
+                        data: data,
+                        backgroundColor: color,
+                        borderColor: color,
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        hoverBackgroundColor: color + 'CC'
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: true,
+                        position: 'top',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: {
+                                size: 12
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                return `${context.dataset.label}: ${context.parsed.y}`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        },
+                        ticks: {
+                            stepSize: Math.max(1, Math.floor(Math.max(...data) / 5)) || 1
+                        }
+                    },
+                    x: {
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.1)'
+                        }
+                    }
+                }
+            }
+        };
+
+        chartInstance.current = new ChartJS(ctx, config);
+
+        return () => {
+            if (chartInstance.current) {
+                chartInstance.current.destroy();
+            }
+        };
+    }, [data, labels, color, title, isEmptyData]);
+
+    if (isEmptyData) {
+        return (
+            <div className="h-48 flex items-center justify-center">
+                <div className="text-gray-500 text-center">
+                    <div className="icon-bar-chart-3 text-3xl mb-2 opacity-50"></div>
+                    <p>Нет данных</p>
+                </div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="h-48" data-name="weekly-comparison-chart">
+            <canvas ref={chartRef}></canvas>
+        </div>
+    );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(
+    <ErrorBoundary>
+        <App />
+    </ErrorBoundary>
+);
