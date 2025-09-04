@@ -1,3 +1,4 @@
+// SyncStatus.js
 function SyncStatus({ lastSync, isLoading, onSync, isAutoRefresh = false }) {
     try {
         const formatSyncTime = (timestamp) => {
@@ -36,9 +37,9 @@ function SyncStatus({ lastSync, isLoading, onSync, isAutoRefresh = false }) {
                 </div>
 
                 {isAutoRefresh && (
-                    <div className="flex items-center gap-1 text-xs text-green-600">
+                    <div className="flex items-center gap-1 text-xs text-green-600" title="Автообновление каждые 10 минут">
                         <div className="icon-clock text-sm"></div>
-                        <span>Автообновление</span>
+                        <span>Авто (10 мин)</span>
                     </div>
                 )}
             </div>
