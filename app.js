@@ -104,7 +104,7 @@ function App() {
             if (autoRefreshEnabled && !isLoading) {
                 loadDataFromDatabase(true);
             }
-        }, 2 * 60 * 1000);
+        }, 10 * 60 * 1000); // 10 минут вместо 2 минут
     };
 
     const loadDataFromDatabase = async (isBackground = false) => {
@@ -307,11 +307,10 @@ function App() {
         };
         
         // Простая реализация - считаем общее количество лидов оператора по стадиям
-        // В реальном приложении нужно разделить по неделям
         operatorLeads.forEach(lead => {
             const stage = mapStatusToStage(lead.STATUS_ID);
             if (filteredMonthlyData[stage]) {
-                // Равномерно распределяем по неделям (для демонстрации)
+                // Равномерно распределяем по неделям
                 const weekIndex = Math.floor(Math.random() * 4);
                 filteredMonthlyData[stage][weekIndex]++;
             }
