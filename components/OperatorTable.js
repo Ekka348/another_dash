@@ -26,19 +26,18 @@ function OperatorTable({ stage, operators = [] }) {
                             {sortedOperators.map((operator, index) => (
                                 <tr key={operator.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                     <td className="py-4 px-2">
-                                        <div className="flex items-center gap-2">
-                                            {index < 3 && (
-                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${
-                                                    index === 0 ? 'bg-yellow-500' : index === 1 ? 'bg-gray-400' : 'bg-orange-400'
-                                                }`}>
-                                                    {index + 1}
-                                                </div>
-                                            )}
-                                            {index >= 3 && (
-                                                <span className="text-gray-500 text-sm ml-2">#{index + 1}</span>
-                                            )}
-                                        </div>
-                                    </td>
+    <div className="flex items-center gap-3">
+        <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
+            {operator.name.charAt(0)}
+        </div>
+        <div>
+            <p className="font-medium text-gray-900">{operator.name}</p>
+            {operator.department && (
+                <p className="text-sm text-gray-600">{operator.department}</p>
+            )}
+        </div>
+    </div>
+</td>
                                     <td className="py-4 px-2">
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
