@@ -1,3 +1,4 @@
+// dataSync.js
 // Синхронизация данных между Bitrix24 и приложением
 
 // Флаг для отслеживания фоновых запросов
@@ -349,7 +350,7 @@ function formatDateForInput(date) {
     return formatDateForBitrix(date);
 }
 
-// Экспорт функций для использования в других модулях
+// Экспорт функций для использования в других модулей
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         syncWithBitrix24,
