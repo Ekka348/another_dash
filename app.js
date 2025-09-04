@@ -66,14 +66,27 @@ function App() {
     
     // Состояния для фильтров
     const [selectedOperator, setSelectedOperator] = React.useState(null);
-    const [selectedStageFilter, setSelectedStageFilter] = React.useState('all');
+    const [selectedDateRange, setSelectedDateRange] = React.useState('today');
+    const [selectedChartType, setSelectedChartType] = React.useState('line');
     const [allOperators, setAllOperators] = React.useState([]);
-    const [activeFilters, setActiveFilters] = React.useState([]);
     
     const stages = [
         { id: 'callback', name: 'Перезвонить', color: 'text-blue-600' },
         { id: 'approval', name: 'На согласовании', color: 'text-yellow-600' },
         { id: 'invited', name: 'Приглашен к рекрутеру', color: 'text-green-600' }
+    ];
+
+    const chartTypes = [
+        { id: 'line', name: 'Линейный', icon: 'bar-chart-3' },
+        { id: 'bar', name: 'Столбчатый', icon: 'bar-chart-4' },
+        { id: 'doughnut', name: 'Круговая', icon: 'pie-chart' }
+    ];
+
+    const dateRanges = [
+        { id: 'today', name: 'Сегодня' },
+        { id: 'week', name: 'Неделя' },
+        { id: 'month', name: 'Месяц' },
+        { id: 'custom', name: 'Произвольный' }
     ];
 
     const refreshIntervalRef = React.useRef(null);
@@ -90,26 +103,12 @@ function App() {
         };
     }, []);
 
+    // Обновляем данные при изменении фильтров
     React.useEffect(() => {
-        updateActiveFilters();
-    }, [selectedOperator, selectedStageFilter]);
-
-    const updateActiveFilters = () => {
-        const filters = [];
-        if (selectedOperator) {
-            const operator = allOperators.find(op => op.ID == selectedOperator);
-            if (operator) {
-                filters.push(`Оператор: ${operator.FULL_NAME}`);
-            }
+        if (allOperators.length > 0) {
+            loadDataFromDatabase(true);
         }
-        if (selectedStageFilter !== 'all') {
-            const stage = stages.find(s => s.id === selectedStageFilter);
-            if (stage) {
-                filters.push(`Стадия: ${stage.name}`);
-            }
-        }
-        setActiveFilters(filters);
-    };
+    }, [selectedOperator, selectedDateRange]);
 
     const startAutoRefresh = () => {
         if (refreshIntervalRef.current) {
@@ -136,15 +135,20 @@ function App() {
                 throw new Error('Функции синхронизации не загружены');
             }
             
+            // Устанавливаем даты в зависимости от выбранного диапазона
+            setDateRangeBasedOnSelection();
+            
             const dbData = await syncWithBitrix24();
             
-            // Сохраняем всех операторов для селектора
             if (dbData.operators) {
                 setAllOperators(dbData.operators);
             }
             
-            // Применяем все активные фильтры
-            let filteredData = applyAllFilters(dbData);
+            // Фильтруем данные по выбранному оператору
+            let filteredData = dbData;
+            if (selectedOperator) {
+                filteredData = filterDataByOperator(dbData, selectedOperator);
+            }
             
             setLeadsData(filteredData.leadsCount || { callback: 0, approval: 0, invited: 0 });
             setOperatorsData(filteredData.operatorsByStage || { callback: [], approval: [], invited: [] });
@@ -152,28 +156,18 @@ function App() {
             if (filteredData.weeklyLeads) {
                 const preparedData = prepareWeeklyChartData(filteredData.weeklyLeads);
                 setWeeklyLeads(preparedData);
-            } else {
-                setWeeklyLeads({
-                    callback: Array(7).fill(0),
-                    approval: Array(7).fill(0),
-                    invited: Array(7).fill(0)
-                });
             }
             
             if (filteredData.dailyLeads) {
                 const preparedData = prepareDailyChartData(filteredData.dailyLeads);
                 setDailyLeads(preparedData);
-            } else {
-                setDailyLeads({
-                    callback: Array(13).fill(0),
-                    approval: Array(13).fill(0),
-                    invited: Array(13).fill(0)
-                });
             }
             
             // Загружаем данные по неделям месяца
             const monthlyData = await fetchMonthlyWeeksData();
-            const filteredMonthlyData = applyMonthlyFilters(monthlyData, dbData.leads || []);
+            const filteredMonthlyData = selectedOperator ? 
+                filterMonthlyDataByOperator(monthlyData, selectedOperator, dbData.leads || []) : 
+                monthlyData;
             setMonthlyWeeksLeads(filteredMonthlyData);
             
             setLastSync(dbData.lastSync);
@@ -186,73 +180,85 @@ function App() {
             console.error('Error loading data:', error);
             setSyncError(error.message);
             
+            // Сбрасываем данные в случае ошибки
             setLeadsData({ callback: 0, approval: 0, invited: 0 });
             setOperatorsData({ callback: [], approval: [], invited: [] });
-            setWeeklyLeads({
-                callback: Array(7).fill(0),
-                approval: Array(7).fill(0),
-                invited: Array(7).fill(0)
-            });
-            setDailyLeads({
-                callback: Array(13).fill(0),
-                approval: Array(13).fill(0),
-                invited: Array(13).fill(0)
-            });
-            setMonthlyWeeksLeads({
-                callback: Array(4).fill(0),
-                approval: Array(4).fill(0),
-                invited: Array(4).fill(0)
-            });
+            setWeeklyLeads({ callback: Array(7).fill(0), approval: Array(7).fill(0), invited: Array(7).fill(0) });
+            setDailyLeads({ callback: Array(13).fill(0), approval: Array(13).fill(0), invited: Array(13).fill(0) });
+            setMonthlyWeeksLeads({ callback: Array(4).fill(0), approval: Array(4).fill(0), invited: Array(4).fill(0) });
         } finally {
             setIsLoading(false);
             setIsBackgroundLoading(false);
         }
     };
 
-    const applyAllFilters = (data) => {
-        let filteredData = data;
-        
-        // Фильтр по оператору
-        if (selectedOperator) {
-            filteredData = filterDataByOperator(filteredData, selectedOperator);
+    const setDateRangeBasedOnSelection = () => {
+        const today = new Date();
+        let startDate, endDate;
+
+        switch (selectedDateRange) {
+            case 'today':
+                startDate = new Date(today);
+                endDate = new Date(today);
+                break;
+            case 'week':
+                startDate = new Date(today);
+                startDate.setDate(today.getDate() - today.getDay() + 1);
+                endDate = new Date(today);
+                endDate.setDate(startDate.getDate() + 6);
+                break;
+            case 'month':
+                startDate = new Date(today.getFullYear(), today.getMonth(), 1);
+                endDate = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+                break;
+            case 'custom':
+                // Для произвольного диапазона используем текущие даты из window
+                return;
+            default:
+                startDate = new Date(today);
+                endDate = new Date(today);
         }
-        
-        // Фильтр по стадии
-        if (selectedStageFilter !== 'all') {
-            filteredData = filterDataByStage(filteredData, selectedStageFilter);
-        }
-        
-        return filteredData;
+
+        window.currentStartDate = startDate;
+        window.currentEndDate = endDate;
     };
 
-    const applyMonthlyFilters = (monthlyData, allLeads) => {
-        if (selectedOperator) {
-            return filterMonthlyDataByOperator(monthlyData, selectedOperator, allLeads);
-        }
-        return monthlyData;
+    const handleOperatorSelect = (operatorId) => {
+        setSelectedOperator(operatorId);
+    };
+
+    const handleOperatorReset = () => {
+        setSelectedOperator(null);
+    };
+
+    const handleDateRangeSelect = (rangeId) => {
+        setSelectedDateRange(rangeId);
+    };
+
+    const handleChartTypeSelect = (typeId) => {
+        setSelectedChartType(typeId);
+    };
+
+    const handleStageSelect = (stageId) => {
+        setSelectedStage(stageId);
     };
 
     const filterDataByOperator = (data, operatorId) => {
         const filteredLeads = data.leads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
         
-        // Пересчитываем количество лидов по стадиям
         const leadsCount = {
             callback: filteredLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
             approval: filteredLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
             invited: filteredLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
         };
         
-        // Пересчитываем операторов по стадиям (только выбранный оператор)
         const operatorsByStage = {
             callback: data.operatorsByStage.callback.filter(op => op.id == operatorId),
             approval: data.operatorsByStage.approval.filter(op => op.id == operatorId),
             invited: data.operatorsByStage.invited.filter(op => op.id == operatorId)
         };
         
-        // Фильтруем недельные данные
         const weeklyLeads = filterWeeklyDataByOperator(data.weeklyLeads, operatorId, data.leads);
-        
-        // Фильтруем дневные данные
         const dailyLeads = filterDailyDataByOperator(data.dailyLeads, operatorId, data.leads);
         
         return {
@@ -262,38 +268,6 @@ function App() {
             operatorsByStage,
             weeklyLeads,
             dailyLeads
-        };
-    };
-
-    const filterDataByStage = (data, stage) => {
-        const stageMapping = {
-            'callback': 'IN_PROCESS',
-            'approval': 'UC_A2DF81', 
-            'invited': 'CONVERTED'
-        };
-        
-        const statusId = stageMapping[stage];
-        if (!statusId) return data;
-        
-        const filteredLeads = data.leads.filter(lead => lead.STATUS_ID === statusId);
-        
-        return {
-            ...data,
-            leads: filteredLeads,
-            leadsCount: {
-                [stage]: filteredLeads.length,
-                ...Object.keys(data.leadsCount).reduce((acc, key) => {
-                    if (key !== stage) acc[key] = 0;
-                    return acc;
-                }, {})
-            },
-            operatorsByStage: {
-                [stage]: data.operatorsByStage[stage] || [],
-                ...Object.keys(data.operatorsByStage).reduce((acc, key) => {
-                    if (key !== stage) acc[key] = [];
-                    return acc;
-                }, {})
-            }
         };
     };
 
@@ -361,22 +335,6 @@ function App() {
         return filteredMonthlyData;
     };
 
-    const handleOperatorChange = (operatorId) => {
-        setSelectedOperator(operatorId);
-        loadDataFromDatabase();
-    };
-
-    const handleStageFilterChange = (stage) => {
-        setSelectedStageFilter(stage);
-        loadDataFromDatabase();
-    };
-
-    const handleResetFilters = () => {
-        setSelectedOperator(null);
-        setSelectedStageFilter('all');
-        loadDataFromDatabase();
-    };
-
     const fetchMonthlyWeeksData = async () => {
         try {
             const today = new Date();
@@ -384,22 +342,10 @@ function App() {
             const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
             
             const weeks = [
-                {
-                    start: new Date(firstDayOfMonth),
-                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 7)
-                },
-                {
-                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 8),
-                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 14)
-                },
-                {
-                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 15),
-                    end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 21)
-                },
-                {
-                    start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 22),
-                    end: new Date(lastDayOfMonth)
-                }
+                { start: new Date(firstDayOfMonth), end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 7) },
+                { start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 8), end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 14) },
+                { start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 15), end: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 21) },
+                { start: new Date(firstDayOfMonth.getFullYear(), firstDayOfMonth.getMonth(), 22), end: new Date(lastDayOfMonth) }
             ];
             
             const monthlyData = {
@@ -410,7 +356,6 @@ function App() {
             
             for (let i = 0; i < weeks.length; i++) {
                 const week = weeks[i];
-                
                 const originalStartDate = window.currentStartDate;
                 const originalEndDate = window.currentEndDate;
                 
@@ -418,7 +363,10 @@ function App() {
                 window.currentEndDate = week.end;
                 
                 const weekData = await syncWithBitrix24();
-                let filteredWeekData = applyAllFilters(weekData);
+                let filteredWeekData = weekData;
+                if (selectedOperator) {
+                    filteredWeekData = filterDataByOperator(weekData, selectedOperator);
+                }
                 
                 if (filteredWeekData.leadsCount) {
                     monthlyData.callback[i] = filteredWeekData.leadsCount.callback || 0;
@@ -434,11 +382,7 @@ function App() {
             
         } catch (error) {
             console.error('Error fetching monthly weeks data:', error);
-            return {
-                callback: Array(4).fill(0),
-                approval: Array(4).fill(0),
-                invited: Array(4).fill(0)
-            };
+            return { callback: Array(4).fill(0), approval: Array(4).fill(0), invited: Array(4).fill(0) };
         }
     };
 
@@ -451,7 +395,7 @@ function App() {
         }
     };
 
-    const handleConfigSave = () {
+    const handleConfigSave = () => {
         loadDataFromDatabase();
     };
 
@@ -460,6 +404,7 @@ function App() {
             setIsLoading(true);
             window.currentStartDate = startDate;
             window.currentEndDate = endDate;
+            setSelectedDateRange('custom');
             await loadDataFromDatabase();
         } catch (error) {
             console.error('Date filter error:', error);
@@ -555,12 +500,44 @@ function App() {
         return `${year}-${month}-${day}`;
     };
 
-    const getFilterButtonClass = (isActive) => 
-        `px-4 py-2 rounded-lg border transition-colors ${
-            isActive 
-                ? 'bg-blue-500 text-white border-blue-500 shadow-md' 
-                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-        }`;
+    // Функция для получения данных для текущего выбранного графика
+    const getChartDataForSelectedStage = () => {
+        switch (selectedDateRange) {
+            case 'today':
+                return {
+                    callback: dailyLeads.callback,
+                    approval: dailyLeads.approval,
+                    invited: dailyLeads.invited
+                };
+            case 'week':
+                return {
+                    callback: weeklyLeads.callback,
+                    approval: weeklyLeads.approval,
+                    invited: weeklyLeads.invited
+                };
+            case 'month':
+                return monthlyWeeksLeads;
+            default:
+                return {
+                    callback: dailyLeads.callback,
+                    approval: dailyLeads.approval,
+                    invited: dailyLeads.invited
+                };
+        }
+    };
+
+    const getChartLabelsForSelectedRange = () => {
+        switch (selectedDateRange) {
+            case 'today':
+                return getHourLabels();
+            case 'week':
+                return getWeekDayLabels();
+            case 'month':
+                return getWeeklyLabels();
+            default:
+                return getHourLabels();
+        }
+    };
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -618,62 +595,77 @@ function App() {
 
                 {/* Панель фильтров */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
-                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Фильтры</h3>
+                    <h3 className="text-lg font-semibold text-gray-900 mb-4">Фильтры и настройки</h3>
                     
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
                         {/* Фильтр по оператору */}
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Оператор</label>
                             <select
                                 value={selectedOperator || ''}
-                                onChange={(e) => handleOperatorChange(e.target.value || null)}
+                                onChange={(e) => handleOperatorSelect(e.target.value || null)}
                                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 disabled={isLoading || allOperators.length === 0}
                             >
                                 <option value="">Все операторы</option>
                                 {allOperators.map(operator => (
                                     <option key={operator.ID} value={operator.ID}>
-                                        {operator.FULL_NAME} {operator.DEPARTMENT ? `(${operator.DEPARTMENT})` : ''}
+                                        {operator.FULL_NAME} ({operator.DEPARTMENT})
                                     </option>
                                 ))}
                             </select>
                         </div>
 
-                        {/* Фильтр по стадии */}
+                        {/* Фильтр по периоду */}
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Стадия</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Период</label>
                             <select
-                                value={selectedStageFilter}
-                                onChange={(e) => handleStageFilterChange(e.target.value)}
+                                value={selectedDateRange}
+                                onChange={(e) => handleDateRangeSelect(e.target.value)}
                                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 disabled={isLoading}
                             >
-                                <option value="all">Все стадии</option>
-                                <option value="callback">Перезвонить</option>
-                                <option value="approval">На согласовании</option>
-                                <option value="invited">Приглашен к рекрутеру</option>
+                                {dateRanges.map(range => (
+                                    <option key={range.id} value={range.id}>
+                                        {range.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        {/* Фильтр по типу графика */}
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Тип графика</label>
+                            <select
+                                value={selectedChartType}
+                                onChange={(e) => handleChartTypeSelect(e.target.value)}
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                disabled={isLoading}
+                            >
+                                {chartTypes.map(type => (
+                                    <option key={type.id} value={type.id}>
+                                        {type.name}
+                                    </option>
+                                ))}
                             </select>
                         </div>
 
                         {/* Кнопка сброса */}
                         <div className="flex items-end">
                             <button
-                                onClick={handleResetFilters}
-                                disabled={isLoading || (!selectedOperator && selectedStageFilter === 'all')}
+                                onClick={handleOperatorReset}
+                                disabled={(!selectedOperator && selectedDateRange === 'today' && selectedChartType === 'line') || isLoading}
                                 className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600 disabled:opacity-50 flex items-center gap-2 w-full justify-center"
                             >
-                                <div className="icon-x text-sm"></div>
+                                <div className="icon-refresh-ccw text-sm"></div>
                                 Сбросить фильтры
                             </button>
                         </div>
                     </div>
 
-                    {/* Индикатор активных фильтров */}
-                    {activeFilters.length > 0 && (
-                        <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
-                            <p className="text-sm text-blue-700">
-                                <strong>Активные фильтры:</strong> {activeFilters.join(', ')}
-                            </p>
+                    {selectedOperator && (
+                        <div className="mt-3 text-sm text-gray-600">
+                            Выбран оператор: {allOperators.find(op => op.ID == selectedOperator)?.FULL_NAME}
                         </div>
                     )}
                 </div>
@@ -685,6 +677,8 @@ function App() {
                         icon="phone"
                         color="blue"
                         trend={+12}
+                        onClick={() => handleStageSelect('callback')}
+                        isSelected={selectedStage === 'callback'}
                     />
                     <MetricCard 
                         title="На согласовании"
@@ -692,6 +686,8 @@ function App() {
                         icon="clock"
                         color="yellow"
                         trend={-3}
+                        onClick={() => handleStageSelect('approval')}
+                        isSelected={selectedStage === 'approval'}
                     />
                     <MetricCard 
                         title="Приглашен к рекрутеру"
@@ -699,125 +695,157 @@ function App() {
                         icon="user-check"
                         color="green"
                         trend={+8}
+                        onClick={() => handleStageSelect('invited')}
+                        isSelected={selectedStage === 'invited'}
                     />
                 </div>
 
-                {/* Графики за текущий день */}
+                {/* Основной график с фильтрами */}
                 <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день (8:00-20:00)</h2>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <LeadsChart 
-                            type="line" 
-                            data={dailyLeads.callback || Array(13).fill(0)}
-                            labels={getHourLabels()}
-                            color="#2563eb"
-                            title="Перезвонить"
-                            filters={activeFilters.join(', ')}
-                        />
+                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-6">
+                        <h2 className="text-xl font-semibold text-gray-900 mb-4 lg:mb-0">
+                            {selectedDateRange === 'today' && 'График за сегодня'}
+                            {selectedDateRange === 'week' && 'График за неделю'}
+                            {selectedDateRange === 'month' && 'График за месяц'}
+                            {selectedDateRange === 'custom' && 'График за выбранный период'}
+                        </h2>
                         
-                        <LeadsChart 
-                            type="line" 
-                            data={dailyLeads.approval || Array(13).fill(0)}
-                            labels={getHourLabels()}
-                            color="#f59e0b"
-                            title="На согласовании"
-                            filters={activeFilters.join(', ')}
-                        />
-                        
-                        <LeadsChart 
-                            type="line" 
-                            data={dailyLeads.invited || Array(13).fill(0)}
-                            labels={getHourLabels()}
-                            color="#10b981"
-                            title="Приглашен к рекрутеру"
-                            filters={activeFilters.join(', ')}
-                        />
-                    </div>
-                </div>
-
-                {/* Графики за текущую неделю */}
-                <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <LeadsChart 
-                            type="line" 
-                            data={weeklyLeads.callback || Array(7).fill(0)}
-                            labels={getWeekDayLabels()}
-                            color="#2563eb"
-                            title="Перезвонить"
-                            filters={activeFilters.join(', ')}
-                        />
-                        
-                        <LeadsChart 
-                            type="line" 
-                            data={weeklyLeads.approval || Array(7).fill(0)}
-                            labels={getWeekDayLabels()}
-                            color="#f59e0b"
-                            title="На согласовании"
-                            filters={activeFilters.join(', ')}
-                        />
-                        
-                        <LeadsChart 
-                            type="line" 
-                            data={weeklyLeads.invited || Array(7).fill(0)}
-                            labels={getWeekDayLabels()}
-                            color="#10b981"
-                            title="Приглашен к рекрутеру"
-                            filters={activeFilters.join(', ')}
-                        />
-                    </div>
-                </div>
-
-                {/* Сравнение данных по неделям месяца */}
-                <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Сравнение данных по неделям</h2>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <WeeklyComparisonChart 
-                            data={monthlyWeeksLeads.callback || Array(4).fill(0)}
-                            labels={getWeeklyLabels()}
-                            color="#2563eb"
-                            title="Перезвонить"
-                        />
-                        
-                        <WeeklyComparisonChart 
-                            data={monthlyWeeksLeads.approval || Array(4).fill(0)}
-                            labels={getWeeklyLabels()}
-                            color="#f59e0b"
-                            title="На согласовании"
-                        />
-                        
-                        <WeeklyComparisonChart 
-                            data={monthlyWeeksLeads.invited || Array(4).fill(0)}
-                            labels={getWeeklyLabels()}
-                            color="#10b981"
-                            title="Приглашен к рекрутеру"
-                        />
-                    </div>
-                </div>
-
-                <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-3 text-gray-900">Фильтр по стадиям для таблиц</h3>
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            onClick={() => setSelectedStage('all')}
-                            className={getFilterButtonClass(selectedStage === 'all')}
-                        >
-                            Все стадии
-                        </button>
-                        {stages.map(stage => (
+                        <div className="flex gap-2">
+                            {stages.map(stage => (
+                                <button
+                                    key={stage.id}
+                                    onClick={() => handleStageSelect(stage.id)}
+                                    className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                                        selectedStage === stage.id || selectedStage === 'all'
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                    }`}
+                                >
+                                    {stage.name}
+                                </button>
+                            ))}
                             <button
-                                key={stage.id}
-                                onClick={() => setSelectedStage(stage.id)}
-                                className={getFilterButtonClass(selectedStage === stage.id)}
+                                onClick={() => handleStageSelect('all')}
+                                className={`px-3 py-1 rounded-lg text-sm font-medium transition-colors ${
+                                    selectedStage === 'all'
+                                        ? 'bg-gray-600 text-white'
+                                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                }`}
                             >
-                                {stage.name}
+                                Все
                             </button>
-                        ))}
+                        </div>
+                    </div>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        {(selectedStage === 'all' || selectedStage === 'callback') && (
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type={selectedChartType}
+                                    data={getChartDataForSelectedStage().callback}
+                                    labels={getChartLabelsForSelectedRange()}
+                                    color="#2563eb"
+                                    title="Перезвонить"
+                                />
+                            </div>
+                        )}
+                        
+                        {(selectedStage === 'all' || selectedStage === 'approval') && (
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type={selectedChartType}
+                                    data={getChartDataForSelectedStage().approval}
+                                    labels={getChartLabelsForSelectedRange()}
+                                    color="#f59e0b"
+                                    title="На согласовании"
+                                />
+                            </div>
+                        )}
+                        
+                        {(selectedStage === 'all' || selectedStage === 'invited') && (
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type={selectedChartType}
+                                    data={getChartDataForSelectedStage().invited}
+                                    labels={getChartLabelsForSelectedRange()}
+                                    color="#10b981"
+                                    title="Приглашен к рекрутеру"
+                                />
+                            </div>
+                        )}
                     </div>
                 </div>
+
+                {/* Дополнительные графики */}
+                {selectedDateRange !== 'today' && (
+                    <div className="dashboard-card mb-8">
+                        <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день (8:00-20:00)</h2>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type="line" 
+                                    data={dailyLeads.callback}
+                                    labels={getHourLabels()}
+                                    color="#2563eb"
+                                    title="Перезвонить"
+                                />
+                            </div>
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type="line" 
+                                    data={dailyLeads.approval}
+                                    labels={getHourLabels()}
+                                    color="#f59e0b"
+                                    title="На согласовании"
+                                />
+                            </div>
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type="line" 
+                                    data={dailyLeads.invited}
+                                    labels={getHourLabels()}
+                                    color="#10b981"
+                                    title="Приглашен к рекрутеру"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {selectedDateRange !== 'week' && (
+                    <div className="dashboard-card mb-8">
+                        <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
+                        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type="line" 
+                                    data={weeklyLeads.callback}
+                                    labels={getWeekDayLabels()}
+                                    color="#2563eb"
+                                    title="Перезвонить"
+                                />
+                            </div>
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type="line" 
+                                    data={weeklyLeads.approval}
+                                    labels={getWeekDayLabels()}
+                                    color="#f59e0b"
+                                    title="На согласовании"
+                                />
+                            </div>
+                            <div className="dashboard-card">
+                                <LeadsChart 
+                                    type="line" 
+                                    data={weeklyLeads.invited}
+                                    labels={getWeekDayLabels()}
+                                    color="#10b981"
+                                    title="Приглашен к рекрутеру"
+                                />
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div className="space-y-6">
                     {selectedStage === 'all' ? (
@@ -867,12 +895,10 @@ function mapStatusToStage(statusId) {
 function WeeklyComparisonChart({ data, labels, color, title }) {
     const chartRef = React.useRef(null);
     const chartInstance = React.useRef(null);
-
     const isEmptyData = !data || data.length === 0 || data.every(val => val === 0);
 
     React.useEffect(() => {
         if (!chartRef.current || isEmptyData) return;
-
         const ctx = chartRef.current.getContext('2d');
         
         if (chartInstance.current) {
@@ -883,67 +909,32 @@ function WeeklyComparisonChart({ data, labels, color, title }) {
             type: 'bar',
             data: {
                 labels: labels || ['1-я неделя', '2-я неделя', '3-я неделя', '4-я неделя'],
-                datasets: [
-                    {
-                        label: title,
-                        data: data,
-                        backgroundColor: color,
-                        borderColor: color,
-                        borderWidth: 1,
-                        borderRadius: 6,
-                        hoverBackgroundColor: color + 'CC'
-                    }
-                ]
+                datasets: [{
+                    label: title,
+                    data: data,
+                    backgroundColor: color,
+                    borderColor: color,
+                    borderWidth: 1,
+                    borderRadius: 6,
+                    hoverBackgroundColor: color + 'CC'
+                }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            usePointStyle: true,
-                            padding: 20,
-                            font: {
-                                size: 12
-                            }
-                        }
-                    },
-                    tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                return `${context.dataset.label}: ${context.parsed.y}`;
-                            }
-                        }
-                    }
+                    legend: { display: true, position: 'top' },
+                    tooltip: { callbacks: { label: (context) => `${context.dataset.label}: ${context.parsed.y}` } }
                 },
                 scales: {
-                    y: {
-                        beginAtZero: true,
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.1)'
-                        },
-                        ticks: {
-                            stepSize: Math.max(1, Math.floor(Math.max(...data) / 5)) || 1
-                        }
-                    },
-                    x: {
-                        grid: {
-                            color: 'rgba(0, 0, 0, 0.1)'
-                        }
-                    }
+                    y: { beginAtZero: true, grid: { color: 'rgba(0, 0, 0, 0.1)' }, ticks: { stepSize: Math.max(1, Math.floor(Math.max(...data) / 5)) || 1 } },
+                    x: { grid: { color: 'rgba(0, 0, 0, 0.1)' } }
                 }
             }
         };
 
         chartInstance.current = new ChartJS(ctx, config);
-
-        return () => {
-            if (chartInstance.current) {
-                chartInstance.current.destroy();
-            }
-        };
+        return () => { if (chartInstance.current) chartInstance.current.destroy(); };
     }, [data, labels, color, title, isEmptyData]);
 
     if (isEmptyData) {
@@ -957,16 +948,8 @@ function WeeklyComparisonChart({ data, labels, color, title }) {
         );
     }
 
-    return (
-        <div className="h-48" data-name="weekly-comparison-chart">
-            <canvas ref={chartRef}></canvas>
-        </div>
-    );
+    return <div className="h-48" data-name="weekly-comparison-chart"><canvas ref={chartRef}></canvas></div>;
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(
-    <ErrorBoundary>
-        <App />
-    </ErrorBoundary>
-);
+root.render(<ErrorBoundary><App /></ErrorBoundary>);
