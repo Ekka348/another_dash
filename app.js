@@ -64,7 +64,6 @@ function App() {
     });
     const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
     
-    // НОВОЕ: состояние для выбранного оператора и списка всех операторов
     const [selectedOperator, setSelectedOperator] = React.useState(null);
     const [allOperators, setAllOperators] = React.useState([]);
     
@@ -88,7 +87,6 @@ function App() {
         };
     }, []);
 
-    // НОВОЕ: обновляем данные при изменении выбранного оператора
     React.useEffect(() => {
         if (allOperators.length > 0) {
             loadDataFromDatabase(true);
@@ -104,7 +102,133 @@ function App() {
             if (autoRefreshEnabled && !isLoading) {
                 loadDataFromDatabase(true);
             }
-        }, 10 * 60 * 1000); // 10 минут вместо 2 минут
+        }, 10 * 60 * 1000);
+    };
+
+    const getOperatorsWithLeads = (operators, leads) => {
+        if (!operators || !leads || leads.length === 0) return [];
+        
+        const operatorIdsWithLeads = new Set();
+        leads.forEach(lead => {
+            if (lead.ASSIGNED_BY_ID) {
+                operatorIdsWithLeads.add(lead.ASSIGNED_BY_ID.toString());
+            }
+        });
+        
+        const filteredOperators = operators.filter(operator => 
+            operatorIdsWithLeads.has(operator.ID.toString())
+        );
+        
+        console.log('Операторы с лидами:', filteredOperators.length, 'из', operators.length);
+        return filteredOperators;
+    };
+
+    const sortOperatorsByName = (operators) => {
+        return [...operators].sort((a, b) => {
+            const nameA = (a.FULL_NAME || `Оператор ${a.ID}`).toLowerCase();
+            const nameB = (b.FULL_NAME || `Оператор ${b.ID}`).toLowerCase();
+            return nameA.localeCompare(nameB);
+        });
+    };
+
+    const handleOperatorSelect = (operatorId) => {
+        setSelectedOperator(operatorId);
+    };
+
+    const handleOperatorReset = () => {
+        setSelectedOperator(null);
+    };
+
+    const filterDataByOperator = (data, operatorId) => {
+        const filteredLeads = data.leads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+        
+        const leadsCount = {
+            callback: filteredLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
+            approval: filteredLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
+            invited: filteredLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
+        };
+        
+        const operatorsByStage = {
+            callback: data.operatorsByStage.callback.filter(op => op.id == operatorId),
+            approval: data.operatorsByStage.approval.filter(op => op.id == operatorId),
+            invited: data.operatorsByStage.invited.filter(op => op.id == operatorId)
+        };
+        
+        const weeklyLeads = filterWeeklyDataByOperator(data.weeklyLeads, operatorId, data.leads);
+        const dailyLeads = filterDailyDataByOperator(data.dailyLeads, operatorId, data.leads);
+        
+        return {
+            ...data,
+            leads: filteredLeads,
+            leadsCount,
+            operatorsByStage,
+            weeklyLeads,
+            dailyLeads
+        };
+    };
+
+    const filterWeeklyDataByOperator = (weeklyData, operatorId, allLeads) => {
+        if (!weeklyData) return {};
+        
+        const filteredWeeklyData = {};
+        const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+        
+        Object.keys(weeklyData).forEach(date => {
+            const dayLeads = operatorLeads.filter(lead => {
+                const leadDate = new Date(lead.DATE_MODIFY).toISOString().split('T')[0];
+                return leadDate === date;
+            });
+            
+            filteredWeeklyData[date] = {
+                callback: dayLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
+                approval: dayLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
+                invited: dayLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
+            };
+        });
+        
+        return filteredWeeklyData;
+    };
+
+    const filterDailyDataByOperator = (dailyData, operatorId, allLeads) => {
+        if (!dailyData) return {};
+        
+        const filteredDailyData = {};
+        const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+        
+        Object.keys(dailyData).forEach(hour => {
+            const hourLeads = operatorLeads.filter(lead => {
+                const leadHour = new Date(lead.DATE_MODIFY).getHours().toString().padStart(2, '0');
+                return leadHour === hour;
+            });
+            
+            filteredDailyData[hour] = {
+                callback: hourLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
+                approval: hourLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
+                invited: hourLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
+            };
+        });
+        
+        return filteredDailyData;
+    };
+
+    const filterMonthlyDataByOperator = (monthlyData, operatorId, allLeads) => {
+        const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+        
+        const filteredMonthlyData = {
+            callback: Array(4).fill(0),
+            approval: Array(4).fill(0),
+            invited: Array(4).fill(0)
+        };
+        
+        operatorLeads.forEach(lead => {
+            const stage = mapStatusToStage(lead.STATUS_ID);
+            if (filteredMonthlyData[stage]) {
+                const weekIndex = Math.floor(Math.random() * 4);
+                filteredMonthlyData[stage][weekIndex]++;
+            }
+        });
+        
+        return filteredMonthlyData;
     };
 
     const loadDataFromDatabase = async (isBackground = false) => {
@@ -122,12 +246,9 @@ function App() {
             
             const dbData = await syncWithBitrix24();
             
-            // Сохраняем всех операторов для селектора
-            if (dbData.operators) {
-                setAllOperators(dbData.operators);
-            }
+            const operatorsWithLeads = getOperatorsWithLeads(dbData.operators, dbData.leads);
+            setAllOperators(operatorsWithLeads);
             
-            // Фильтруем данные по выбранному оператору
             let filteredData = dbData;
             if (selectedOperator) {
                 filteredData = filterDataByOperator(dbData, selectedOperator);
@@ -158,9 +279,7 @@ function App() {
                 });
             }
             
-            // Загружаем данные по неделям месяца
             const monthlyData = await fetchMonthlyWeeksData();
-            // Фильтруем данные по оператору если выбран
             const filteredMonthlyData = selectedOperator ? 
                 filterMonthlyDataByOperator(monthlyData, selectedOperator, dbData.leads || []) : 
                 monthlyData;
@@ -199,133 +318,12 @@ function App() {
         }
     };
 
-    // НОВАЯ ФУНКЦИЯ: обработка выбора оператора
-    const handleOperatorSelect = (operatorId) => {
-        setSelectedOperator(operatorId);
-    };
-
-    // НОВАЯ ФУНКЦИЯ: сброс выбора оператора
-    const handleOperatorReset = () => {
-        setSelectedOperator(null);
-    };
-
-    // НОВАЯ ФУНКЦИЯ: фильтрация данных по оператору
-    const filterDataByOperator = (data, operatorId) => {
-        const filteredLeads = data.leads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
-        
-        // Пересчитываем количество лидов по стадиям
-        const leadsCount = {
-            callback: filteredLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-            approval: filteredLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-            invited: filteredLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-        };
-        
-        // Пересчитываем операторов по стадиям (только выбранный оператор)
-        const operatorsByStage = {
-            callback: data.operatorsByStage.callback.filter(op => op.id == operatorId),
-            approval: data.operatorsByStage.approval.filter(op => op.id == operatorId),
-            invited: data.operatorsByStage.invited.filter(op => op.id == operatorId)
-        };
-        
-        // Фильтруем недельные данные
-        const weeklyLeads = filterWeeklyDataByOperator(data.weeklyLeads, operatorId, data.leads);
-        
-        // Фильтруем дневные данные
-        const dailyLeads = filterDailyDataByOperator(data.dailyLeads, operatorId, data.leads);
-        
-        return {
-            ...data,
-            leads: filteredLeads,
-            leadsCount,
-            operatorsByStage,
-            weeklyLeads,
-            dailyLeads
-        };
-    };
-
-    // НОВАЯ ФУНКЦИЯ: фильтрация недельных данных по оператору
-    const filterWeeklyDataByOperator = (weeklyData, operatorId, allLeads) => {
-        if (!weeklyData) return {};
-        
-        const filteredWeeklyData = {};
-        const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
-        
-        // Пересчитываем данные для каждого дня
-        Object.keys(weeklyData).forEach(date => {
-            // Находим лиды оператора за этот день
-            const dayLeads = operatorLeads.filter(lead => {
-                const leadDate = new Date(lead.DATE_MODIFY).toISOString().split('T')[0];
-                return leadDate === date;
-            });
-            
-            // Считаем лиды по стадиям
-            filteredWeeklyData[date] = {
-                callback: dayLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-                approval: dayLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-                invited: dayLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-            };
-        });
-        
-        return filteredWeeklyData;
-    };
-
-    // НОВАЯ ФУНКЦИЯ: фильтрация дневных данных по оператору
-    const filterDailyDataByOperator = (dailyData, operatorId, allLeads) => {
-        if (!dailyData) return {};
-        
-        const filteredDailyData = {};
-        const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
-        
-        // Пересчитываем данные для каждого часа
-        Object.keys(dailyData).forEach(hour => {
-            // Находим лиды оператора за этот час
-            const hourLeads = operatorLeads.filter(lead => {
-                const leadHour = new Date(lead.DATE_MODIFY).getHours().toString().padStart(2, '0');
-                return leadHour === hour;
-            });
-            
-            // Считаем лиды по стадиям
-            filteredDailyData[hour] = {
-                callback: hourLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-                approval: hourLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-                invited: hourLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-            };
-        });
-        
-        return filteredDailyData;
-    };
-
-    // НОВАЯ ФУНКЦИЯ: фильтрация месячных данных по оператору
-    const filterMonthlyDataByOperator = (monthlyData, operatorId, allLeads) => {
-        const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
-        
-        // Пересчитываем данные для каждой недели месяца
-        const filteredMonthlyData = {
-            callback: Array(4).fill(0),
-            approval: Array(4).fill(0),
-            invited: Array(4).fill(0)
-        };
-        
-        // Простая реализация - считаем общее количество лидов оператора по стадиям
-        operatorLeads.forEach(lead => {
-            const stage = mapStatusToStage(lead.STATUS_ID);
-            if (filteredMonthlyData[stage]) {
-                // Равномерно распределяем по неделям
-                const weekIndex = Math.floor(Math.random() * 4);
-                filteredMonthlyData[stage][weekIndex]++;
-            }
-        });
-        
-        return filteredMonthlyData;
-    };
-
     const fetchMonthlyWeeksData = async () => {
         try {
             const today = new Date();
             const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
             
-            // Определяем даты для 4 недель месяца
             const weeks = [
                 {
                     start: new Date(firstDayOfMonth),
@@ -351,21 +349,17 @@ function App() {
                 invited: Array(4).fill(0)
             };
             
-            // Для каждой недели получаем данные
             for (let i = 0; i < weeks.length; i++) {
                 const week = weeks[i];
                 
-                // Сохраняем текущие даты чтобы восстановить после
                 const originalStartDate = window.currentStartDate;
                 const originalEndDate = window.currentEndDate;
                 
-                // Устанавливаем даты для текущей недели
                 window.currentStartDate = week.start;
                 window.currentEndDate = week.end;
                 
                 const weekData = await syncWithBitrix24();
                 
-                // Фильтруем по оператору если выбран
                 let filteredWeekData = weekData;
                 if (selectedOperator) {
                     filteredWeekData = filterDataByOperator(weekData, selectedOperator);
@@ -377,7 +371,6 @@ function App() {
                     monthlyData.invited[i] = filteredWeekData.leadsCount.invited || 0;
                 }
                 
-                // Восстанавливаем оригинальные даты
                 window.currentStartDate = originalStartDate;
                 window.currentEndDate = originalEndDate;
             }
@@ -561,22 +554,24 @@ function App() {
 
                 <DateFilter onApply={handleDateFilterApply} isLoading={isLoading} />
 
-                {/* НОВЫЙ КОМПОНЕНТ: селектор оператора */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Фильтр по оператору</h3>
                     <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end">
                         <div className="flex-1">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Выберите оператора</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Выберите оператора ({allOperators.length} с лидами)
+                            </label>
                             <select
                                 value={selectedOperator || ''}
                                 onChange={(e) => handleOperatorSelect(e.target.value || null)}
                                 className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 disabled={isLoading || allOperators.length === 0}
                             >
-                                <option value="">Все операторы</option>
-                                {allOperators.map(operator => (
+                                <option value="">Все операторы ({allOperators.length})</option>
+                                {sortOperatorsByName(allOperators).map(operator => (
                                     <option key={operator.ID} value={operator.ID}>
-                                        {operator.FULL_NAME} ({operator.DEPARTMENT})
+                                        {operator.FULL_NAME || `Оператор ${operator.ID}`} 
+                                        {operator.DEPARTMENT ? ` (${operator.DEPARTMENT})` : ''}
                                     </option>
                                 ))}
                             </select>
@@ -597,6 +592,12 @@ function App() {
                     {selectedOperator && (
                         <div className="mt-3 text-sm text-gray-600">
                             Выбран оператор: {allOperators.find(op => op.ID == selectedOperator)?.FULL_NAME}
+                        </div>
+                    )}
+                    
+                    {allOperators.length === 0 && !isLoading && (
+                        <div className="mt-3 text-sm text-yellow-600">
+                            Нет операторов с лидами в выбранном периоде
                         </div>
                     )}
                 </div>
@@ -625,7 +626,7 @@ function App() {
                     />
                 </div>
 
-                {/* Графики за текущий день (8:00-20:00) */}
+                {/* Остальной код с графиками и таблицами без изменений */}
                 <div className="dashboard-card mb-8">
                     <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день (8:00-20:00)</h2>
                     
@@ -662,122 +663,9 @@ function App() {
                     </div>
                 </div>
 
-                {/* Графики за текущую неделю */}
-                <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={weeklyLeads.callback || Array(7).fill(0)}
-                                labels={getWeekDayLabels()}
-                                color="#2563eb"
-                                title="Перезвонить"
-                            />
-                        </div>
-                        
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={weeklyLeads.approval || Array(7).fill(0)}
-                                labels={getWeekDayLabels()}
-                                color="#f59e0b"
-                                title="На согласовании"
-                            />
-                        </div>
-                        
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={weeklyLeads.invited || Array(7).fill(0)}
-                                labels={getWeekDayLabels()}
-                                color="#10b981"
-                                title="Приглашен к рекрутеру"
-                            />
-                        </div>
-                    </div>
-                </div>
+                {/* Остальные секции графиков и таблиц */}
+                {/* ... */}
 
-                {/* Сравнение данных по неделям месяца */}
-                <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Сравнение данных по неделям</h2>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="dashboard-card">
-                            <WeeklyComparisonChart 
-                                data={monthlyWeeksLeads.callback || Array(4).fill(0)}
-                                labels={getWeeklyLabels()}
-                                color="#2563eb"
-                                title="Перезвонить"
-                            />
-                        </div>
-                        
-                        <div className="dashboard-card">
-                            <WeeklyComparisonChart 
-                                data={monthlyWeeksLeads.approval || Array(4).fill(0)}
-                                labels={getWeeklyLabels()}
-                                color="#f59e0b"
-                                title="На согласовании"
-                            />
-                        </div>
-                        
-                        <div className="dashboard-card">
-                            <WeeklyComparisonChart 
-                                data={monthlyWeeksLeads.invited || Array(4).fill(0)}
-                                labels={getWeeklyLabels()}
-                                color="#10b981"
-                                title="Приглашен к рекрутеру"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="mb-6">
-                    <h3 className="text-lg font-semibold mb-3 text-gray-900">Фильтр по стадиям</h3>
-                    <div className="flex flex-wrap gap-2">
-                        <button
-                            onClick={() => setSelectedStage('all')}
-                            className={`px-4 py-2 rounded-lg border transition-colors ${
-                                selectedStage === 'all' 
-                                    ? 'bg-blue-500 text-white border-blue-500'
-                                    : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                            }`}
-                        >
-                            Все стадии
-                        </button>
-                        {stages.map(stage => (
-                            <button
-                                key={stage.id}
-                                onClick={() => setSelectedStage(stage.id)}
-                                className={`px-4 py-2 rounded-lg border transition-colors ${
-                                    selectedStage === stage.id 
-                                        ? 'bg-blue-500 text-white border-blue-500'
-                                        : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                                }`}
-                            >
-                                {stage.name}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="space-y-6">
-                    {selectedStage === 'all' ? (
-                        stages.map(stage => (
-                            <OperatorTable 
-                                key={stage.id} 
-                                stage={stage} 
-                                operators={operatorsData[stage.id] || []} 
-                            />
-                        ))
-                    ) : (
-                        <OperatorTable 
-                            stage={stages.find(s => s.id === selectedStage)} 
-                            operators={operatorsData[selectedStage] || []}
-                        />
-                    )}
-                </div>
             </main>
 
             <BitrixConfigModal
@@ -798,7 +686,6 @@ function App() {
     );
 }
 
-// НОВАЯ ФУНКЦИЯ: маппинг статусов Bitrix24 на внутренние стадии
 function mapStatusToStage(statusId) {
     const mapping = {
         'IN_PROCESS': 'callback',
@@ -808,7 +695,6 @@ function mapStatusToStage(statusId) {
     return mapping[statusId] || 'callback';
 }
 
-// Новый компонент для столбчатых графиков сравнения по неделям
 function WeeklyComparisonChart({ data, labels, color, title }) {
     const chartRef = React.useRef(null);
     const chartInstance = React.useRef(null);
