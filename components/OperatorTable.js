@@ -1,3 +1,4 @@
+// OperatorTable.js
 function OperatorTable({ stage, operators = [] }) {
     try {
         const sortedOperators = [...operators].sort((a, b) => b.leads - a.leads);
@@ -46,7 +47,9 @@ function OperatorTable({ stage, operators = [] }) {
                                             </div>
                                             <div>
                                                 <p className="font-medium text-gray-900">{operator.name}</p>
-                                                <p className="text-sm text-gray-600">{operator.department}</p>
+                                                {operator.department && (
+                                                    <p className="text-sm text-gray-600">{operator.department}</p>
+                                                )}
                                             </div>
                                         </div>
                                     </td>
