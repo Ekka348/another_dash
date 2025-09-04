@@ -20,6 +20,18 @@ const BITRIX_CONFIG = {
     userId: ''
 };
 
+// Черный список пользователей для исключения
+const BLACKLISTED_USERS = [
+    'Елена Бондаренко',
+    'Зинаида Соколова',
+    'админ Админович',
+    'Сергей Смирнов',
+    'Тест А',
+    'Екатерина Горбач',
+    'Екатерина Гвозденович',
+    'Админ2'
+];
+
 // Настройка конфигурации Bitrix24
 function setBitrixConfig(domain, webhook, userId) {
     if (!domain || !webhook) {
@@ -162,7 +174,7 @@ async function fetchBitrixLeads(startDate, endDate) {
     }
 }
 
-// Получение пользователей (операторов) из Bitrix24 (С ПАГИНАЦИЕЙ)
+// Получение пользователей (операторов) из Bitrix24 (С ПАГИНАЦИЕЙ И ФИЛЬТРАЦИЕЙ)
 async function fetchBitrixUsers() {
     try {
         let allUsers = [];
@@ -178,7 +190,7 @@ async function fetchBitrixUsers() {
                     'ACTIVE': true,
                     '!ID': '1'
                 },
-                select: ['ID', 'NAME', 'LAST_NAME', 'WORK_DEPARTMENT', 'IS_ONLINE', 'LAST_ACTIVITY_DATE', 'EMAIL'],
+                select: ['ID', 'NAME', 'LAST_NAME', 'WORK_DEPARTMENT', 'IS_ONLINE', 'LAST_ACTIVITY_DATE', 'EMAIL', 'UF_DEPARTMENT'],
                 start: start
             });
 
@@ -187,10 +199,34 @@ async function fetchBitrixUsers() {
                 break;
             }
 
-            allUsers = allUsers.concat(users);
+            // Фильтруем пользователей и обрабатываем отделы
+            const filteredUsers = users
+                .filter(user => {
+                    const fullName = `${user.NAME || ''} ${user.LAST_NAME || ''}`.trim();
+                    return !BLACKLISTED_USERS.includes(fullName);
+                })
+                .map(user => {
+                    // Используем WORK_DEPARTMENT если есть, иначе скрываем "Не указан"
+                    let departmentName = user.WORK_DEPARTMENT && user.WORK_DEPARTMENT.trim() !== '' 
+                        ? user.WORK_DEPARTMENT 
+                        : '';
+
+                    return {
+                        ID: user.ID,
+                        NAME: user.NAME || '',
+                        LAST_NAME: user.LAST_NAME || '',
+                        FULL_NAME: `${user.NAME || ''} ${user.LAST_NAME || ''}`.trim() || `User #${user.ID}`,
+                        DEPARTMENT: departmentName,
+                        IS_ONLINE: user.IS_ONLINE === 'Y',
+                        LAST_ACTIVITY_DATE: user.LAST_ACTIVITY_DATE,
+                        EMAIL: user.EMAIL || ''
+                    };
+                });
+
+            allUsers = allUsers.concat(filteredUsers);
             totalLoaded += users.length;
             
-            console.log(`Loaded batch of ${users.length} users, total: ${totalLoaded}`);
+            console.log(`Loaded batch of ${users.length} users, filtered to ${filteredUsers.length}, total: ${totalLoaded}`);
 
             if (users.length < batchSize) {
                 hasMore = false;
@@ -200,18 +236,9 @@ async function fetchBitrixUsers() {
             }
         }
 
-        console.log(`Total loaded ${allUsers.length} users from Bitrix24`);
+        console.log(`Total loaded ${allUsers.length} users from Bitrix24 after filtering`);
         
-        return allUsers.map(user => ({
-            ID: user.ID,
-            NAME: user.NAME || '',
-            LAST_NAME: user.LAST_NAME || '',
-            FULL_NAME: `${user.NAME || ''} ${user.LAST_NAME || ''}`.trim() || `User #${user.ID}`,
-            DEPARTMENT: user.WORK_DEPARTMENT || 'Не указан',
-            IS_ONLINE: user.IS_ONLINE === 'Y',
-            LAST_ACTIVITY_DATE: user.LAST_ACTIVITY_DATE,
-            EMAIL: user.EMAIL || ''
-        }));
+        return allUsers;
     } catch (error) {
         console.error('Error fetching users from Bitrix24:', error);
         throw error;
