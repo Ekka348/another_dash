@@ -1,8 +1,8 @@
-function LeadsChart({ type, data, labels, color, title }) {
+// LeadsChart.js
+function LeadsChart({ type, data, labels, color, title, filters }) {
     const chartRef = React.useRef(null);
     const chartInstance = React.useRef(null);
 
-    // Проверка на пустые данные
     const isEmptyData = !data || data.length === 0 || data.every(val => val === 0);
 
     React.useEffect(() => {
@@ -145,8 +145,18 @@ function LeadsChart({ type, data, labels, color, title }) {
     }
 
     return (
-        <div className="h-48" data-name="leads-chart">
-            <canvas ref={chartRef}></canvas>
+        <div className="dashboard-card">
+            <div className="flex items-center justify-between mb-4">
+                <h4 className="text-md font-semibold text-gray-900">{title}</h4>
+                {filters && (
+                    <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                        {filters}
+                    </span>
+                )}
+            </div>
+            <div className="h-48" data-name="leads-chart">
+                <canvas ref={chartRef}></canvas>
+            </div>
         </div>
     );
 }
