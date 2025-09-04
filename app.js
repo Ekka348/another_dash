@@ -451,7 +451,7 @@ function App() {
         }
     };
 
-    const handleConfigSave = () => {
+    const handleConfigSave = () {
         loadDataFromDatabase();
     };
 
@@ -633,7 +633,7 @@ function App() {
                                 <option value="">Все операторы</option>
                                 {allOperators.map(operator => (
                                     <option key={operator.ID} value={operator.ID}>
-                                        {operator.FULL_NAME} ({operator.DEPARTMENT})
+                                        {operator.FULL_NAME} {operator.DEPARTMENT ? `(${operator.DEPARTMENT})` : ''}
                                     </option>
                                 ))}
                             </select>
@@ -970,4 +970,3 @@ root.render(
         <App />
     </ErrorBoundary>
 );
-
