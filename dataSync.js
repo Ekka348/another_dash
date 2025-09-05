@@ -1,3 +1,119 @@
+// dataSync.js
+// Синхронизация данных между Bitrix24 и приложением
+
+// Флаг для отслеживания фоновых запросов
+let isBackgroundSync = false;
+
+// Базовые структуры для пустых данных
+const EMPTY_LEADS_COUNT = { callback: 0, approval: 0, invited: 0 };
+const EMPTY_OPERATORS_BY_STAGE = { callback: [], approval: [], invited: [] };
+
+async function syncWithBitrix24(filters = {}) {
+    try {
+        if (isBackgroundSync) {
+            console.log('Фоновая синхронизация с Bitrix24...', filters);
+        } else {
+            console.log('Синхронизация с Bitrix24...', filters);
+        }
+        
+        // Проверяем конфигурацию Bitrix24
+        if (!loadBitrixConfig() || !isBitrixConfigured()) {
+            console.warn('Bitrix24 не настроен, используются пустые данные');
+            return {
+                leads: [],
+                operators: [],
+                leadsCount: EMPTY_LEADS_COUNT,
+                operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
+                lastSync: null,
+                usingMockData: true,
+                error: 'Bitrix24 не настроен'
+            };
+        }
+
+        // Получаем текущие даты
+        const startDate = window.currentStartDate || new Date();
+        const endDate = window.currentEndDate || new Date();
+
+        // Синхронизация операторов
+        const operators = await fetchBitrixUsers();
+        
+        // Синхронизация лидов
+        const leads = await fetchBitrixLeads(startDate, endDate);
+
+        // Обрабатываем данные для дашборда
+        const processedData = processLeadsData(leads, operators);
+
+        // Применяем фильтры если они есть
+        let filteredData = processedData;
+        if (filters.operatorId) {
+            filteredData = filterDataByOperator(processedData, filters.operatorId);
+        }
+        if (filters.stage) {
+            filteredData = filterDataByStage(filteredData, filters.stage);
+        }
+
+        return {
+            ...filteredData,
+            lastSync: new Date().toISOString(),
+            usingMockData: false
+        };
+
+    } catch (error) {
+        if (isBackgroundSync) {
+            console.warn('Ошибка фоновой синхронизации:', error.message);
+        } else {
+            console.error('Ошибка синхронизации с Bitrix24:', error);
+        }
+        // Возвращаем пустые данные в случае ошибки
+        return {
+            leads: [],
+            operators: [],
+            leadsCount: EMPTY_LEADS_COUNT,
+            operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
+            lastSync: null,
+            usingMockData: true,
+            error: error.message,
+            errorType: error.name
+        };
+    }
+}
+
+// Функция для фоновой синхронизации
+async function backgroundSyncWithBitrix24(filters = {}) {
+    isBackgroundSync = true;
+    try {
+        return await syncWithBitrix24(filters);
+    } finally {
+        isBackgroundSync = false;
+    }
+}
+
+// Фильтрация данных по оператору
+function filterDataByOperator(data, operatorId) {
+    const filteredLeads = data.leads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+    
+    // Пересчитываем количество лидов по стадиям
+    const leadsCount = {
+        callback: filteredLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
+        approval: filteredLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
+        invited: filteredLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
+    };
+    
+    // Пересчитываем операторов по стадиям (только выбранный оператор)
+    const operatorsByStage = {
+        callback: data.operatorsByStage.callback.filter(op => op.id == operatorId),
+        approval: data.operatorsByStage.approval.filter(op => op.id == operatorId),
+        invited: data.operatorsByStage.invited.filter(op => op.id == operatorId)
+    };
+    
+    return {
+        ...data,
+        leads: filteredLeads,
+        leadsCount,
+        operatorsByStage
+    };
+}
+
 // Фильтрация данных по стадии
 function filterDataByStage(data, stage) {
     const stageMapping = {
