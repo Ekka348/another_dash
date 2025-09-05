@@ -4,26 +4,6 @@
 // Флаг для отслеживания фоновых запросов
 let isBackgroundSync = false;
 
-// Проверяем доступность зависимостей
-if (typeof fetchBitrixUsers === 'undefined') {
-    console.error('Ошибка: fetchBitrixUsers не определен');
-}
-if (typeof fetchBitrixLeads === 'undefined') {
-    console.error('Ошибка: fetchBitrixLeads не определен');
-}
-if (typeof fetchWeeklyLeadsData === 'undefined') {
-    console.error('Ошибка: fetchWeeklyLeadsData не определен');
-}
-if (typeof fetchDailyLeadsData === 'undefined') {
-    console.error('Ошибка: fetchDailyLeadsData не определен');
-}
-if (typeof loadBitrixConfig === 'undefined') {
-    console.error('Ошибка: loadBitrixConfig не определен');
-}
-if (typeof isBitrixConfigured === 'undefined') {
-    console.error('Ошибка: isBitrixConfigured не определен');
-}
-
 // Базовые структуры для пустых данных
 const EMPTY_LEADS_COUNT = { callback: 0, approval: 0, invited: 0 };
 const EMPTY_OPERATORS_BY_STAGE = { callback: [], approval: [], invited: [] };
@@ -37,466 +17,486 @@ async function syncWithBitrix24(filters = {}) {
         }
         
         // Проверяем конфигурацию Bitrix24
-        if (!loadBitrixConfig() || !isBitrixConfigured()) {
-            console.warn('Bitrix24 не настроен, используются пустые данные');
-            return {
-                leads: [],
-                operators: [],
-                leadsCount: EMPTY_LEADS_COUNT,
-                operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
-                weeklyLeads: {},
-                dailyLeads: {},
-                lastSync: null,
-                usingMockData: true,
-                error: 'Bitrix24 не настроен'
-            };
-        }
-
-        // Получаем текущие даты
-        const startDate = window.currentStartDate || new Date();
-        const endDate = window.currentEndDate || new Date();
-
-        if (isBackgroundSync) {
-            console.log('Фоновая синхронизация за период:', formatDateForInput(startDate), '-', formatDateForInput(endDate));
-        } else {
-            console.log('Синхронизация за период:', formatDateForInput(startDate), '-', formatDateForInput(endDate));
-        }
-
-        // Синхронизация операторов
-        const operators = await fetchBitrixUsers();
-        if (isBackgroundSync) {
-            console.log('Загружено операторов (фон):', operators.length);
-        } else {
-            console.log('Загружено операторов:', operators.length);
+        if (typeof loadBitrixConfig !== 'function') {
+            console.error('Функция loadBitrixConfig не найдена');
+            return getEmptyResponse('Функция loadBitrixConfig не найдена');
         }
         
-        // Синхронизация лидов
-        const leads = await fetchBitrixLeads(startDate, endDate);
-        if (isBackgroundSync) {
-            console.log('Загружено лидов (фон):', leads.length);
-        } else {
-            console.log('Загружено лидов:', leads.length);
+        const config = loadBitrixConfig();
+        if (!config || !config.domain || !config.webhookUrl) {
+            console.error('Конфигурация Bitrix24 не настроена');
+            return getEmptyResponse('Конфигурация Bitrix24 не настроена');
         }
-
-        // Получаем данные за текущую неделю для графиков
-        const weeklyLeads = await fetchWeeklyLeadsData();
-        if (isBackgroundSync) {
-            console.log('Загружены данные за неделю (фон)');
-        } else {
-            console.log('Загружены данные за неделю');
+        
+        // Получаем данные из Bitrix24
+        const bitrixData = await fetchBitrixData(config, filters);
+        
+        if (bitrixData.error) {
+            console.error('Ошибка получения данных из Bitrix24:', bitrixData.error);
+            return getEmptyResponse(bitrixData.error);
         }
-
-        // Получаем данные за текущий день для графиков
-        const dailyLeads = await fetchDailyLeadsData();
-        if (isBackgroundSync) {
-            console.log('Загружены данные за день (фон)');
-        } else {
-            console.log('Загружены данные за день');
+        
+        // Обрабатываем данные
+        const processedData = processBitrixData(bitrixData, filters);
+        
+        // Сохраняем в IndexedDB
+        try {
+            await saveToDatabase(processedData);
+            console.log('Данные успешно сохранены в базу');
+        } catch (dbError) {
+            console.error('Ошибка сохранения в базу:', dbError);
+            // Продолжаем работу, но возвращаем ошибку
+            processedData.error = `Ошибка базы данных: ${dbError.message}`;
         }
+        
+        // Обновляем время последней синхронизации
+        processedData.lastSync = new Date().toISOString();
+        
+        return processedData;
+        
+    } catch (error) {
+        console.error('Критическая ошибка синхронизации:', error);
+        return getEmptyResponse(`Критическая ошибка: ${error.message}`);
+    }
+}
 
-        // Обрабатываем данные для дашборда
-        const processedData = processLeadsData(leads, operators);
-
-        // Применяем фильтры если они есть
-        let filteredData = processedData;
-        if (filters.operatorId) {
-            filteredData = filterDataByOperator(processedData, filters.operatorId);
+async function fetchBitrixData(config, filters) {
+    try {
+        // Получаем лиды
+        const leads = await fetchLeadsFromBitrix(config, filters);
+        if (leads.error) {
+            return { error: leads.error };
         }
-        if (filters.stage) {
-            filteredData = filterDataByStage(filteredData, filters.stage);
+        
+        // Получаем операторов
+        const operators = await fetchOperatorsFromBitrix(config);
+        if (operators.error) {
+            console.warn('Ошибка получения операторов:', operators.error);
+            // Продолжаем работу без операторов
         }
-
+        
         return {
-            ...filteredData,
+            leads: leads.data || [],
+            operators: operators.data || [],
+            error: null
+        };
+        
+    } catch (error) {
+        console.error('Ошибка получения данных из Bitrix24:', error);
+        return { error: error.message };
+    }
+}
+
+async function fetchLeadsFromBitrix(config, filters) {
+    try {
+        const { operatorId, stage } = filters;
+        
+        // Формируем фильтр для запроса
+        let filter = {};
+        
+        // Фильтр по дате (если установлены глобальные даты)
+        if (window.currentStartDate && window.currentEndDate) {
+            filter['>=DATE_MODIFY'] = formatDateForBitrix(window.currentStartDate);
+            filter['<=DATE_MODIFY'] = formatDateForBitrix(window.currentEndDate);
+        } else {
+            // По умолчанию - последние 30 дней
+            const thirtyDaysAgo = new Date();
+            thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+            filter['>=DATE_MODIFY'] = formatDateForBitrix(thirtyDaysAgo);
+            filter['<=DATE_MODIFY'] = formatDateForBitrix(new Date());
+        }
+        
+        // Фильтр по оператору
+        if (operatorId) {
+            filter['ASSIGNED_BY_ID'] = operatorId;
+        }
+        
+        // Фильтр по стадии
+        if (stage) {
+            const stageMapping = {
+                'callback': 'IN_PROCESS',
+                'approval': 'UC_A2DF81',
+                'invited': 'CONVERTED'
+            };
+            filter['STATUS_ID'] = stageMapping[stage];
+        }
+        
+        console.log('Фильтр для запроса лидов:', filter);
+        
+        // Формируем URL для запроса
+        const url = `${config.webhookUrl}/crm.lead.list`;
+        const params = {
+            filter: filter,
+            select: ['ID', 'TITLE', 'STATUS_ID', 'ASSIGNED_BY_ID', 'DATE_CREATE', 'DATE_MODIFY', 'OPPORTUNITY'],
+            order: { DATE_MODIFY: 'DESC' },
+            start: 0
+        };
+        
+        let allLeads = [];
+        let hasMore = true;
+        let currentStart = 0;
+        const batchSize = 50;
+        
+        // Получаем данные пачками
+        while (hasMore) {
+            params.start = currentStart;
+            
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(params)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            
+            if (data.error) {
+                throw new Error(data.error_description || data.error);
+            }
+            
+            if (data.result && data.result.length > 0) {
+                allLeads = allLeads.concat(data.result);
+                currentStart += batchSize;
+                
+                // Ограничиваем количество запросов для фоновой синхронизации
+                if (isBackgroundSync && currentStart >= 200) {
+                    console.log('Фоновая синхронизация: ограничение 200 записей');
+                    hasMore = false;
+                } else {
+                    hasMore = data.result.length === batchSize;
+                }
+            } else {
+                hasMore = false;
+            }
+        }
+        
+        console.log(`Получено ${allLeads.length} лидов из Bitrix24`);
+        return { data: allLeads, error: null };
+        
+    } catch (error) {
+        console.error('Ошибка получения лидов:', error);
+        return { error: error.message };
+    }
+}
+
+async function fetchOperatorsFromBitrix(config) {
+    try {
+        const url = `${config.webhookUrl}/user.get`;
+        const params = {
+            filter: { 'ACTIVE': true },
+            select: ['ID', 'NAME', 'LAST_NAME', 'SECOND_NAME', 'EMAIL', 'UF_DEPARTMENT'],
+            order: { 'LAST_NAME': 'ASC' }
+        };
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params)
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        
+        if (data.error) {
+            throw new Error(data.error_description || data.error);
+        }
+        
+        // Обрабатываем данные операторов
+        const operators = (data.result || []).map(operator => ({
+            ID: operator.ID,
+            FULL_NAME: `${operator.LAST_NAME || ''} ${operator.NAME || ''} ${operator.SECOND_NAME || ''}`.trim(),
+            EMAIL: operator.EMAIL || '',
+            DEPARTMENT: operator.UF_DEPARTMENT ? await getDepartmentName(config, operator.UF_DEPARTMENT) : ''
+        }));
+        
+        console.log(`Получено ${operators.length} операторов из Bitrix24`);
+        return { data: operators, error: null };
+        
+    } catch (error) {
+        console.error('Ошибка получения операторов:', error);
+        return { error: error.message };
+    }
+}
+
+async function getDepartmentName(config, departmentId) {
+    try {
+        if (!departmentId) return '';
+        
+        const url = `${config.webhookUrl}/department.get`;
+        const params = { ID: departmentId };
+        
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(params)
+        });
+        
+        if (!response.ok) {
+            return '';
+        }
+        
+        const data = await response.json();
+        
+        if (data.error || !data.result) {
+            return '';
+        }
+        
+        return data.result.NAME || '';
+        
+    } catch (error) {
+        console.warn('Ошибка получения названия отдела:', error);
+        return '';
+    }
+}
+
+function processBitrixData(bitrixData, filters) {
+    const { leads, operators } = bitrixData;
+    
+    try {
+        // Подсчитываем лиды по стадиям
+        const leadsCount = countLeadsByStage(leads);
+        
+        // Группируем операторов по стадиям
+        const operatorsByStage = groupOperatorsByStage(leads, operators);
+        
+        // Анализируем данные по дням недели
+        const weeklyLeads = analyzeWeeklyData(leads);
+        
+        // Анализируем данные по часам дня
+        const dailyLeads = analyzeDailyData(leads);
+        
+        return {
+            leads,
+            leadsCount,
+            operators,
+            operatorsByStage,
             weeklyLeads,
             dailyLeads,
-            lastSync: new Date().toISOString(),
-            usingMockData: false
+            error: null
         };
-
+        
     } catch (error) {
-        if (isBackgroundSync) {
-            console.warn('Ошибка фоновой синхронизации:', error.message);
-        } else {
-            console.error('Ошибка синхронизации с Bitrix24:', error);
-        }
-        // Возвращаем пустые данные в случае ошибки
+        console.error('Ошибка обработки данных:', error);
         return {
             leads: [],
-            operators: [],
             leadsCount: EMPTY_LEADS_COUNT,
+            operators: [],
             operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
             weeklyLeads: {},
             dailyLeads: {},
-            lastSync: null,
-            usingMockData: true,
-            error: error.message,
-            errorType: error.name
+            error: `Ошибка обработки: ${error.message}`
         };
     }
 }
 
-// Функция для фоновой синхронизации
-async function backgroundSyncWithBitrix24(filters = {}) {
-    isBackgroundSync = true;
-    try {
-        return await syncWithBitrix24(filters);
-    } finally {
-        isBackgroundSync = false;
-    }
-}
-
-// Фильтрация данных по оператору
-function filterDataByOperator(data, operatorId) {
-    const filteredLeads = data.leads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+function countLeadsByStage(leads) {
+    const counts = { callback: 0, approval: 0, invited: 0 };
     
-    // Пересчитываем количество лидов по стадиям
-    const leadsCount = {
-        callback: filteredLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-        approval: filteredLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-        invited: filteredLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-    };
-    
-    // Пересчитываем операторов по стадиям (только выбранный оператор)
-    const operatorsByStage = {
-        callback: data.operatorsByStage.callback.filter(op => op.id == operatorId),
-        approval: data.operatorsByStage.approval.filter(op => op.id == operatorId),
-        invited: data.operatorsByStage.invited.filter(op => op.id == operatorId)
-    };
-    
-    // Фильтруем недельные данные
-    const weeklyLeads = filterWeeklyDataByOperator(data.weeklyLeads, operatorId, data.leads);
-    
-    // Фильтруем дневные данные
-    const dailyLeads = filterDailyDataByOperator(data.dailyLeads, operatorId, data.leads);
-    
-    return {
-        ...data,
-        leads: filteredLeads,
-        leadsCount,
-        operatorsByStage,
-        weeklyLeads,
-        dailyLeads
-    };
-}
-
-// Фильтрация данных по стадии
-function filterDataByStage(data, stage) {
-    const stageMapping = {
-        'callback': 'IN_PROCESS',
-        'approval': 'UC_A2DF81', 
-        'invited': 'CONVERTED'
-    };
-    
-    const statusId = stageMapping[stage];
-    if (!statusId) return data;
-    
-    const filteredLeads = data.leads.filter(lead => lead.STATUS_ID === statusId);
-    
-    return {
-        ...data,
-        leads: filteredLeads,
-        leadsCount: {
-            [stage]: filteredLeads.length,
-            ...Object.keys(data.leadsCount).reduce((acc, key) => {
-                if (key !== stage) acc[key] = 0;
-                return acc;
-            }, {})
-        },
-        operatorsByStage: {
-            [stage]: data.operatorsByStage[stage] || [],
-            ...Object.keys(data.operatorsByStage).reduce((acc, key) => {
-                if (key !== stage) acc[key] = [];
-                return acc;
-            }, {})
+    leads.forEach(lead => {
+        switch (lead.STATUS_ID) {
+            case 'IN_PROCESS':
+                counts.callback++;
+                break;
+            case 'UC_A2DF81':
+                counts.approval++;
+                break;
+            case 'CONVERTED':
+                counts.invited++;
+                break;
         }
-    };
-}
-
-// Фильтрация недельных данных по оператору
-function filterWeeklyDataByOperator(weeklyData, operatorId, allLeads) {
-    if (!weeklyData) return {};
-    
-    const filteredWeeklyData = {};
-    const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
-    
-    Object.keys(weeklyData).forEach(date => {
-        const dayLeads = operatorLeads.filter(lead => {
-            const leadDate = new Date(lead.DATE_MODIFY).toISOString().split('T')[0];
-            return leadDate === date;
-        });
-        
-        filteredWeeklyData[date] = {
-            callback: dayLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-            approval: dayLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-            invited: dayLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-        };
     });
     
-    return filteredWeeklyData;
+    return counts;
 }
 
-// Фильтрация дневных данных по оператору
-function filterDailyDataByOperator(dailyData, operatorId, allLeads) {
-    if (!dailyData) return {};
-    
-    const filteredDailyData = {};
-    const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
-    
-    Object.keys(dailyData).forEach(hour => {
-        const hourLeads = operatorLeads.filter(lead => {
-            const leadHour = new Date(lead.DATE_MODify).getHours().toString().padStart(2, '0');
-            return leadHour === hour;
-        });
-        
-        filteredDailyData[hour] = {
-            callback: hourLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-            approval: hourLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-            invited: hourLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-        };
-    });
-    
-    return filteredDailyData;
-}
-
-// Обработка данных лидов для дашборда
-function processLeadsData(leads, operators) {
-    // Подсчет лидов по стадиям с использованием reduce
-    const leadsCount = leads.reduce((acc, lead) => {
-        const stage = mapStatusToStage(lead.STATUS_ID);
-        if (acc[stage] !== undefined) {
-            acc[stage]++;
-        }
-        return acc;
-    }, { callback: 0, approval: 0, invited: 0 });
-
-    // Группировка операторов по стадиям
-    const operatorsByStage = {
+function groupOperatorsByStage(leads, operators) {
+    const result = {
         callback: [],
         approval: [],
         invited: []
     };
-
-    // Создаем маппинг операторов для быстрого доступа
-    const operatorsMap = {};
+    
+    // Создаем мапу операторов для быстрого доступа
+    const operatorMap = {};
     operators.forEach(op => {
-        operatorsMap[op.ID] = {
+        operatorMap[op.ID] = {
             id: op.ID,
-            name: op.FULL_NAME || `Оператор #${op.ID}`,
-            department: op.DEPARTMENT || '',
-            status: op.IS_ONLINE ? 'active' : 'offline',
-            lastActivity: formatRelativeTime(op.LAST_ACTIVITY_DATE || new Date().toISOString())
+            name: op.FULL_NAME,
+            count: 0
         };
     });
-
-    // Подсчитываем лиды для каждого оператора по стадиям
-    const operatorLeadsCount = {};
+    
+    // Считаем лиды по операторам и стадиям
+    const operatorCounts = {
+        callback: {},
+        approval: {},
+        invited: {}
+    };
     
     leads.forEach(lead => {
-        if (!lead.ASSIGNED_BY_ID || !operatorsMap[lead.ASSIGNED_BY_ID]) return;
-        
         const operatorId = lead.ASSIGNED_BY_ID;
-        const stage = mapStatusToStage(lead.STATUS_ID);
+        if (!operatorId) return;
         
-        if (!operatorLeadsCount[operatorId]) {
-            operatorLeadsCount[operatorId] = { callback: 0, approval: 0, invited: 0 };
+        let stage;
+        switch (lead.STATUS_ID) {
+            case 'IN_PROCESS':
+                stage = 'callback';
+                break;
+            case 'UC_A2DF81':
+                stage = 'approval';
+                break;
+            case 'CONVERTED':
+                stage = 'invited';
+                break;
+            default:
+                return;
         }
         
-        if (operatorLeadsCount[operatorId][stage] !== undefined) {
-            operatorLeadsCount[operatorId][stage]++;
+        if (!operatorCounts[stage][operatorId]) {
+            operatorCounts[stage][operatorId] = 0;
         }
+        operatorCounts[stage][operatorId]++;
     });
-
-    // Формируем данные для таблиц
-    Object.keys(operatorLeadsCount).forEach(operatorId => {
-        const operatorData = operatorsMap[operatorId];
-        const counts = operatorLeadsCount[operatorId];
-        
-        Object.keys(counts).forEach(stage => {
-            if (counts[stage] > 0 && operatorsByStage[stage]) {
-                operatorsByStage[stage].push({
-                    ...operatorData,
-                    leads: counts[stage],
-                    trend: calculateTrend(counts[stage])
+    
+    // Формируем результат
+    Object.keys(operatorCounts).forEach(stage => {
+        Object.keys(operatorCounts[stage]).forEach(operatorId => {
+            const operator = operatorMap[operatorId];
+            if (operator) {
+                result[stage].push({
+                    id: operatorId,
+                    name: operator.name,
+                    count: operatorCounts[stage][operatorId]
                 });
             }
         });
-    });
-
-    // Сортируем операторов по количеству лидов
-    Object.keys(operatorsByStage).forEach(stage => {
-        if (operatorsByStage[stage]) {
-            operatorsByStage[stage].sort((a, b) => b.leads - a.leads);
-        }
-    });
-
-    return {
-        leads,
-        operators,
-        leadsCount,
-        operatorsByStage
-    };
-}
-
-// Маппинг статусов Bitrix24 на внутренние стадии
-function mapStatusToStage(statusId) {
-    const mapping = {
-        'IN_PROCESS': 'callback',
-        'UC_A2DF81': 'approval',
-        'CONVERTED': 'invited'
-    };
-    return mapping[statusId] || 'callback';
-}
-
-// Расчет тренда
-function calculateTrend(leadsCount) {
-    if (leadsCount === 0) return 0;
-    const base = Math.floor(Math.random() * 5) + 1;
-    return Math.random() > 0.5 ? base : -base;
-}
-
-// Форматирование относительного времени
-function formatRelativeTime(dateString) {
-    if (!dateString) return 'Неизвестно';
-    
-    try {
-        const date = new Date(dateString);
-        const now = new Date();
-        const diffMs = now - date;
-        const diffMins = Math.floor(diffMs / 60000);
         
-        if (diffMins < 1) return 'только что';
-        if (diffMins < 60) return `${diffMins} мин назад`;
-        if (diffMins < 1440) return `${Math.floor(diffMins / 60)} час назад`;
-        return `${Math.floor(diffMins / 1440)} дн назад`;
-    } catch (error) {
-        return 'Неизвестно';
-    }
-}
-
-// Функция для применения фильтра дат
-function applyDateFilter(startDate, endDate) {
-    if (!startDate || !endDate) {
-        console.error('Не указаны даты для фильтра');
-        return Promise.reject(new Error('Не указаны даты для фильтра'));
-    }
-    
-    window.currentStartDate = startDate;
-    window.currentEndDate = endDate;
-    return syncWithBitrix24();
-}
-
-// Подготовка данных для недельного графика
-function prepareWeeklyChartData(weeklyLeadsData) {
-    const daysOrder = getCurrentWeekDays();
-    const result = {
-        callback: Array(7).fill(0),
-        approval: Array(7).fill(0),
-        invited: Array(7).fill(0)
-    };
-    
-    // Заполняем данные для каждого дня
-    daysOrder.forEach((day, index) => {
-        if (weeklyLeadsData[day]) {
-            result.callback[index] = weeklyLeadsData[day].callback || 0;
-            result.approval[index] = weeklyLeadsData[day].approval || 0;
-            result.invited[index] = weeklyLeadsData[day].invited || 0;
-        }
+        // Сортируем по количеству лидов (по убыванию)
+        result[stage].sort((a, b) => b.count - a.count);
     });
     
     return result;
 }
 
-// Подготовка данных для дневного графика
-function prepareDailyChartData(dailyLeadsData) {
-    const hours = Array.from({length: 24}, (_, i) => i);
-    const result = {
-        callback: Array(24).fill(0),
-        approval: Array(24).fill(0),
-        invited: Array(24).fill(0)
-    };
-    
-    // Заполняем данные для каждого часа
-    hours.forEach(hour => {
-        const hourKey = hour.toString().padStart(2, '0');
-        if (dailyLeadsData[hourKey]) {
-            result.callback[hour] = dailyLeadsData[hourKey].callback || 0;
-            result.approval[hour] = dailyLeadsData[hourKey].approval || 0;
-            result.invited[hour] = dailyLeadsData[hourKey].invited || 0;
-        }
-    });
-    
-    return result;
-}
-
-// Получение дней текущей недели
-function getCurrentWeekDays() {
-    const days = [];
+function analyzeWeeklyData(leads) {
+    const weeklyData = {};
     const today = new Date();
     const firstDayOfWeek = new Date(today);
-    firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
+    firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
     
+    // Инициализируем данные для каждой даты недели
     for (let i = 0; i < 7; i++) {
-        const day = new Date(firstDayOfWeek);
-        day.setDate(firstDayOfWeek.getDate() + i);
-        days.push(formatDateForBitrix(day));
+        const date = new Date(firstDayOfWeek);
+        date.setDate(firstDayOfWeek.getDate() + i);
+        const dateKey = formatDateForBitrix(date);
+        weeklyData[dateKey] = { callback: 0, approval: 0, invited: 0 };
     }
     
-    return days;
-}
-
-// Получение подписей часов для графика
-function getHourLabels() {
-    return Array.from({length: 24}, (_, i) => {
-        return `${i.toString().padStart(2, '0')}:00`;
+    // Заполняем данные
+    leads.forEach(lead => {
+        const leadDate = new Date(lead.DATE_MODIFY);
+        const dateKey = formatDateForBitrix(leadDate);
+        
+        if (weeklyData[dateKey]) {
+            switch (lead.STATUS_ID) {
+                case 'IN_PROCESS':
+                    weeklyData[dateKey].callback++;
+                    break;
+                case 'UC_A2DF81':
+                    weeklyData[dateKey].approval++;
+                    break;
+                case 'CONVERTED':
+                    weeklyData[dateKey].invited++;
+                    break;
+            }
+        }
     });
+    
+    return weeklyData;
 }
 
-// Вспомогательная функция для форматирования даты
-function formatDateForBitrix(date) {
-    if (!(date instanceof Date)) {
-        date = new Date(date);
-    }
-    if (isNaN(date.getTime())) {
-        throw new Error('Invalid date format');
+function analyzeDailyData(leads) {
+    const dailyData = {};
+    
+    // Инициализируем данные для каждого часа (8:00-20:00)
+    for (let hour = 8; hour <= 20; hour++) {
+        const hourKey = hour.toString().padStart(2, '0');
+        dailyData[hourKey] = { callback: 0, approval: 0, invited: 0 };
     }
     
+    // Заполняем данные
+    leads.forEach(lead => {
+        const leadDate = new Date(lead.DATE_MODIFY);
+        const hour = leadDate.getHours();
+        
+        if (hour >= 8 && hour <= 20) {
+            const hourKey = hour.toString().padStart(2, '0');
+            
+            if (dailyData[hourKey]) {
+                switch (lead.STATUS_ID) {
+                    case 'IN_PROCESS':
+                        dailyData[hourKey].callback++;
+                        break;
+                    case 'UC_A2DF81':
+                        dailyData[hourKey].approval++;
+                        break;
+                    case 'CONVERTED':
+                        dailyData[hourKey].invited++;
+                        break;
+                }
+            }
+        }
+    });
+    
+    return dailyData;
+}
+
+function formatDateForBitrix(date) {
     const year = date.getFullYear();
     const month = (date.getMonth() + 1).toString().padStart(2, '0');
     const day = date.getDate().toString().padStart(2, '0');
     return `${year}-${month}-${day}`;
 }
 
-// Вспомогательная функция для форматирования даты в input
-function formatDateForInput(date) {
-    return formatDateForBitrix(date);
+function getEmptyResponse(error = null) {
+    return {
+        leads: [],
+        leadsCount: EMPTY_LEADS_COUNT,
+        operators: [],
+        operatorsByStage: EMPTY_OPERATORS_BY_STAGE,
+        weeklyLeads: {},
+        dailyLeads: {},
+        lastSync: new Date().toISOString(),
+        error: error
+    };
 }
 
-// Делаем функции глобально доступными
+// Функция для фоновой синхронизации
+async function backgroundSync() {
+    try {
+        isBackgroundSync = true;
+        await syncWithBitrix24();
+    } catch (error) {
+        console.error('Ошибка фоновой синхронизации:', error);
+    } finally {
+        isBackgroundSync = false;
+    }
+}
+
+// Экспортируем функции для использования в других файлах
 if (typeof window !== 'undefined') {
     window.syncWithBitrix24 = syncWithBitrix24;
-    window.backgroundSyncWithBitrix24 = backgroundSyncWithBitrix24;
-    window.applyDateFilter = applyDateFilter;
-    console.log('DataSync functions loaded globally');
-}
-
-// Экспорт функций для использования в других модулях
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        syncWithBitrix24,
-        backgroundSyncWithBitrix24,
-        processLeadsData,
-        mapStatusToStage,
-        calculateTrend,
-        formatRelativeTime,
-        applyDateFilter,
-        prepareWeeklyChartData,
-        prepareDailyChartData,
-        getCurrentWeekDays,
-        getHourLabels,
-        formatDateForBitrix,
-        formatDateForInput,
-        EMPTY_LEADS_COUNT,
-        EMPTY_OPERATORS_BY_STAGE
-    };
+    window.backgroundSync = backgroundSync;
 }
