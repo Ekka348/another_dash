@@ -142,7 +142,6 @@ async function backgroundSyncWithBitrix24(filters = {}) {
     try {
         return await syncWithBitrix24(filters);
     } finally {
-        isBackgroundSync = false;
     }
 }
 
@@ -205,7 +204,7 @@ function filterDataByStage(data, stage) {
         },
         operatorsByStage: {
             [stage]: data.operatorsByStage[stage] || [],
-            ...Object.keys(data.operatorsByStage).reduce((acc, key) => {
+            ...Object.keys(data.operatorsByStage).reduce((acc, key) {
                 if (key !== stage) acc[key] = [];
                 return acc;
             }, {})
