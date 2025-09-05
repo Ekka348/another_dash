@@ -26,18 +26,20 @@ function OperatorTable({ stage, operators = [] }) {
                             {sortedOperators.map((operator, index) => (
                                 <tr key={operator.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                                     <td className="py-4 px-2">
-    <div className="flex items-center gap-3">
-        <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
-            {operator.name.charAt(0)}
-        </div>
-        <div>
-            <p className="font-medium text-gray-900">{operator.name}</p>
-            {operator.department && (
-                <p className="text-sm text-gray-600">{operator.department}</p>
-            )}
-        </div>
-    </div>
-</td>
+                                        <div className="flex items-center justify-center">
+                                            {index < 3 ? (
+                                                <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
+                                                    index === 0 ? 'bg-yellow-400' : 
+                                                    index === 1 ? 'bg-gray-400' : 
+                                                    'bg-orange-600'
+                                                }`}>
+                                                    {index + 1}
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-gray-600">{index + 1}</span>
+                                            )}
+                                        </div>
+                                    </td>
                                     <td className="py-4 px-2">
                                         <div className="flex items-center gap-3">
                                             <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full flex items-center justify-center text-white text-sm font-bold">
@@ -45,7 +47,9 @@ function OperatorTable({ stage, operators = [] }) {
                                             </div>
                                             <div>
                                                 <p className="font-medium text-gray-900">{operator.name}</p>
-                                                <p className="text-sm text-gray-600">{operator.department}</p>
+                                                {operator.department && (
+                                                    <p className="text-sm text-gray-600">{operator.department}</p>
+                                                )}
                                             </div>
                                         </div>
                                     </td>
