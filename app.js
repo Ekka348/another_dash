@@ -366,7 +366,10 @@ function App() {
                 window.currentStartDate = week.start;
                 window.currentEndDate = week.end;
                 
-                const weekData = await syncWithBitrix24();
+                const weekData = await syncWithBitrix24({
+    operatorId: selectedOperator,
+    stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
+});
                 
                 // Фильтруем по оператору если выбран
                 let filteredWeekData = weekData;
