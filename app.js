@@ -121,9 +121,9 @@ function App() {
             }
             
             const dbData = await syncWithBitrix24({
-    operatorId: selectedOperator,
-    stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
-});
+                operatorId: selectedOperator,
+                stage: selectedStage !== 'all' ? selectedStage : null
+            });
             
             // Сохраняем всех операторов для селектора
             if (dbData.operators) {
@@ -367,9 +367,9 @@ function App() {
                 window.currentEndDate = week.end;
                 
                 const weekData = await syncWithBitrix24({
-    operatorId: selectedOperator,
-    stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
-});
+                    operatorId: selectedOperator,
+                    stage: selectedStage !== 'all' ? selectedStage : null
+                });
                 
                 // Фильтруем по оператору если выбран
                 let filteredWeekData = weekData;
@@ -574,18 +574,18 @@ function App() {
                         <div className="flex-1">
                             <label className="block text-sm font-medium text-gray-700 mb-1">Выберите оператора</label>
                             <select
-    value={selectedOperator || ''}
-    onChange={(e) => handleOperatorChange(e.target.value || null)}
-    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-    disabled={isLoading || allOperators.length === 0}
->
-    <option value="">Все операторы</option>
-    {allOperators.map(operator => (
-        <option key={operator.ID} value={operator.ID}>
-            {operator.FULL_NAME} {operator.DEPARTMENT ? `(${operator.DEPARTMENT})` : ''}
-        </option>
-    ))}
-</select>
+                                value={selectedOperator || ''}
+                                onChange={(e) => handleOperatorSelect(e.target.value || null)}
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                disabled={isLoading || allOperators.length === 0}
+                            >
+                                <option value="">Все операторы</option>
+                                {allOperators.map(operator => (
+                                    <option key={operator.ID} value={operator.ID}>
+                                        {operator.FULL_NAME} {operator.DEPARTMENT ? `(${operator.DEPARTMENT})` : ''}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                         
                         <div>
