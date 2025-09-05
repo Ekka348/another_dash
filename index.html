@@ -18,7 +18,6 @@
     
     <!-- Chart.js для графиков -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
-    <script>const ChartJS = window.Chart;</script>
 
     <style type="text/tailwindcss">
     @layer theme {
@@ -73,9 +72,41 @@
     <script>
         window.ChartJS = window.Chart;
         console.log('ChartJS initialized:', !!window.ChartJS);
+        
+        // Глобальные переменные для хранения функций
+        window.syncWithBitrix24 = null;
+        window.loadBitrixConfig = null;
+        window.setBitrixConfig = null;
+        window.fetchBitrixUsers = null;
+        
+        // Функция для проверки загрузки всех скриптов
+        function checkAllScriptsLoaded() {
+            const requiredFunctions = [
+                'syncWithBitrix24', 'loadBitrixConfig', 'setBitrixConfig', 'fetchBitrixUsers'
+            ];
+            
+            const missingFunctions = requiredFunctions.filter(func => !window[func]);
+            
+            if (missingFunctions.length === 0) {
+                console.log('Все функции синхронизации загружены успешно');
+            } else {
+                console.warn('Не все функции загружены. Отсутствуют:', missingFunctions);
+                
+                // Создаем заглушки для отсутствующих функций
+                missingFunctions.forEach(func => {
+                    window[func] = function() {
+                        console.error(`Функция ${func} не загружена`);
+                        return Promise.reject(new Error(`Функция ${func} не загружена`));
+                    };
+                });
+            }
+        }
+        
+        // Запускаем проверку после загрузки всех скриптов
+        setTimeout(checkAllScriptsLoaded, 1000);
     </script>
     
-    <!-- Подключение скриптов с абсолютными путями -->
+    <!-- Подключение скриптов в правильном порядке -->
     <script type="text/babel" src="/config.js"></script>
     <script type="text/babel" src="/bitrixApi.js"></script>
     <script type="text/babel" src="/dataSync.js"></script>
@@ -97,6 +128,7 @@
         console.log('React available:', !!window.React);
         console.log('ReactDOM available:', !!window.ReactDOM);
         console.log('Babel available:', !!window.Babel);
+        console.log('ChartJS available:', !!window.ChartJS);
     </script>
 
 </body>
