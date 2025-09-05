@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Дашборд лидов Битрикс24</title>
+    <meta name="description" content="Дашборд для отслеживания лидов в стадиях Перезвонить, На согласовании, Приглашен к рекрутеру">
+    <meta name="keywords" content="битрикс24, лиды, дашборд, аналитика, crm">
+    
+    <!-- React и зависимости -->
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/react@18/umd/react.production.min.js"></script>
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://resource.trickle.so/vendor_lib/unpkg/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Стили -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://resource.trickle.so/vendor_lib/unpkg/lucide-static@0.516.0/font/lucide.css" rel="stylesheet">
+    
+    <!-- Chart.js для графиков -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.9/dist/chart.umd.min.js"></script>
+    <script>const ChartJS = window.Chart;</script>
+
+    <style type="text/tailwindcss">
+    @layer theme {
+        :root {
+            --primary-color: #2563eb;
+            --secondary-color: #f8fafc;
+            --accent-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+        }
+    }
+
+    @layer base {
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            @apply bg-gray-50 text-[var(--text-primary)];
+        }
+    }
+
+    @layer components {
+        .dashboard-card {
+            @apply bg-white rounded-xl shadow-sm border border-gray-200 p-6;
+        }
+        
+        .metric-card {
+            @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4 hover:shadow-md transition-shadow;
+        }
+        
+        .btn-primary {
+            @apply bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors;
+        }
+    }
+
+    @layer utilities {
+        .text-gradient {
+            background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+    }
+    </style>
+
+</head>
+<body class="antialiased">
+    <div id="root"></div>
+    
+    <!-- Делаем Chart.js глобально доступным -->
+    <script>
+        window.ChartJS = window.Chart;
+        console.log('ChartJS initialized:', !!window.ChartJS);
+    </script>
+    
+    <!-- Подключение скриптов с абсолютными путями -->
+    <script type="text/babel" src="/config.js"></script>
+    <script type="text/babel" src="/bitrixApi.js"></script>
+    <script type="text/babel" src="/dataSync.js"></script>
+    
+    <!-- Компоненты -->
+    <script type="text/babel" src="/components/MetricCard.js"></script>
+    <script type="text/babel" src="/components/LeadsChart.js"></script>
+    <script type="text/babel" src="/components/OperatorTable.js"></script>
+    <script type="text/babel" src="/components/SyncStatus.js"></script>
+    <script type="text/babel" src="/components/BitrixConfigModal.js"></script>
+    <script type="text/babel" src="/components/DateFilter.js"></script>
+    
+    <!-- Главное приложение -->
+    <script type="text/babel" src="/app.js"></script>
+
+    <!-- Скрипт для отладки загрузки -->
+    <script>
+        console.log('All scripts loaded successfully');
+        console.log('React available:', !!window.React);
+        console.log('ReactDOM available:', !!window.ReactDOM);
+        console.log('Babel available:', !!window.Babel);
+    </script>
+
+</body>
+</html>
