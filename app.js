@@ -40,6 +40,7 @@ class ErrorBoundary extends React.Component {
 
 function App() {
     const [selectedStage, setSelectedStage] = React.useState('all');
+    const [selectedStageFilter, setSelectedStageFilter] = React.useState('all');
     const [leadsData, setLeadsData] = React.useState({ callback: 0, approval: 0, invited: 0 });
     const [operatorsData, setOperatorsData] = React.useState({ callback: [], approval: [], invited: [] });
     const [isLoading, setIsLoading] = React.useState(false);
@@ -64,7 +65,6 @@ function App() {
     });
     const [autoRefreshEnabled, setAutoRefreshEnabled] = React.useState(true);
     
-    // НОВОЕ: состояние для выбранного оператора и списка всех операторов
     const [selectedOperator, setSelectedOperator] = React.useState(null);
     const [allOperators, setAllOperators] = React.useState([]);
     
@@ -88,12 +88,11 @@ function App() {
         };
     }, []);
 
-    // НОВОЕ: обновляем данные при изменении выбранного оператора
     React.useEffect(() => {
         if (allOperators.length > 0) {
             loadDataFromDatabase(true);
         }
-    }, [selectedOperator]);
+    }, [selectedOperator, selectedStageFilter]);
 
     const startAutoRefresh = () => {
         if (refreshIntervalRef.current) {
@@ -104,7 +103,7 @@ function App() {
             if (autoRefreshEnabled && !isLoading) {
                 loadDataFromDatabase(true);
             }
-        }, 10 * 60 * 1000); // 10 минут вместо 2 минут
+        }, 10 * 60 * 1000);
     };
 
     const loadDataFromDatabase = async (isBackground = false) => {
@@ -121,16 +120,14 @@ function App() {
             }
             
             const dbData = await syncWithBitrix24({
-    operatorId: selectedOperator,
-    stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
-});
+                operatorId: selectedOperator,
+                stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
+            });
             
-            // Сохраняем всех операторов для селектора
             if (dbData.operators) {
                 setAllOperators(dbData.operators);
             }
             
-            // Фильтруем данные по выбранному оператору
             let filteredData = dbData;
             if (selectedOperator) {
                 filteredData = filterDataByOperator(dbData, selectedOperator);
@@ -161,9 +158,7 @@ function App() {
                 });
             }
             
-            // Загружаем данные по неделям месяца
             const monthlyData = await fetchMonthlyWeeksData();
-            // Фильтруем данные по оператору если выбран
             const filteredMonthlyData = selectedOperator ? 
                 filterMonthlyDataByOperator(monthlyData, selectedOperator, dbData.leads || []) : 
                 monthlyData;
@@ -202,66 +197,49 @@ function App() {
         }
     };
 
-    // НОВАЯ ФУНКЦИЯ: обработка выбора оператора
-    const handleOperatorSelect = (operatorId) => {
+    const handleOperatorChange = (operatorId) => {
         setSelectedOperator(operatorId);
     };
 
-    // НОВАЯ ФУНКЦИЯ: сброс выбора оператора
     const handleOperatorReset = () => {
         setSelectedOperator(null);
     };
 
-    // НОВАЯ ФУНКЦИЯ: фильтрация данных по оператору
     const filterDataByOperator = (data, operatorId) => {
         const filteredLeads = data.leads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
         
-        // Пересчитываем количество лидов по стадиям
         const leadsCount = {
             callback: filteredLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
             approval: filteredLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
             invited: filteredLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
         };
         
-        // Пересчитываем операторов по стадиям (только выбранный оператор)
         const operatorsByStage = {
             callback: data.operatorsByStage.callback.filter(op => op.id == operatorId),
             approval: data.operatorsByStage.approval.filter(op => op.id == operatorId),
             invited: data.operatorsByStage.invited.filter(op => op.id == operatorId)
         };
         
-        // Фильтруем недельные данные
-        const weeklyLeads = filterWeeklyDataByOperator(data.weeklyLeads, operatorId, data.leads);
-        
-        // Фильтруем дневные данные
-        const dailyLeads = filterDailyDataByOperator(data.dailyLeads, operatorId, data.leads);
-        
         return {
             ...data,
             leads: filteredLeads,
             leadsCount,
-            operatorsByStage,
-            weeklyLeads,
-            dailyLeads
+            operatorsByStage
         };
     };
 
-    // НОВАЯ ФУНКЦИЯ: фильтрация недельных данных по оператору
     const filterWeeklyDataByOperator = (weeklyData, operatorId, allLeads) => {
         if (!weeklyData) return {};
         
         const filteredWeeklyData = {};
         const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
         
-        // Пересчитываем данные для каждого дня
         Object.keys(weeklyData).forEach(date => {
-            // Находим лиды оператора за этот день
             const dayLeads = operatorLeads.filter(lead => {
                 const leadDate = new Date(lead.DATE_MODIFY).toISOString().split('T')[0];
                 return leadDate === date;
             });
             
-            // Считаем лиды по стадиям
             filteredWeeklyData[date] = {
                 callback: dayLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
                 approval: dayLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
@@ -272,22 +250,18 @@ function App() {
         return filteredWeeklyData;
     };
 
-    // НОВАЯ ФУНКЦИЯ: фильтрация дневных данных по оператору
     const filterDailyDataByOperator = (dailyData, operatorId, allLeads) => {
         if (!dailyData) return {};
         
         const filteredDailyData = {};
         const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
         
-        // Пересчитываем данные для каждого часа
         Object.keys(dailyData).forEach(hour => {
-            // Находим лиды оператора за этот час
             const hourLeads = operatorLeads.filter(lead => {
                 const leadHour = new Date(lead.DATE_MODIFY).getHours().toString().padStart(2, '0');
                 return leadHour === hour;
             });
             
-            // Считаем лиды по стадиям
             filteredDailyData[hour] = {
                 callback: hourLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
                 approval: hourLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
@@ -298,22 +272,18 @@ function App() {
         return filteredDailyData;
     };
 
-    // НОВАЯ ФУНКЦИЯ: фильтрация месячных данных по оператору
     const filterMonthlyDataByOperator = (monthlyData, operatorId, allLeads) => {
         const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
         
-        // Пересчитываем данные для каждой недели месяца
         const filteredMonthlyData = {
             callback: Array(4).fill(0),
             approval: Array(4).fill(0),
             invited: Array(4).fill(0)
         };
         
-        // Простая реализация - считаем общее количество лидов оператора по стадиям
         operatorLeads.forEach(lead => {
             const stage = mapStatusToStage(lead.STATUS_ID);
             if (filteredMonthlyData[stage]) {
-                // Равномерно распределяем по неделям
                 const weekIndex = Math.floor(Math.random() * 4);
                 filteredMonthlyData[stage][weekIndex]++;
             }
@@ -328,7 +298,6 @@ function App() {
             const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
             const lastDayOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
             
-            // Определяем даты для 4 недель месяца
             const weeks = [
                 {
                     start: new Date(firstDayOfMonth),
@@ -354,24 +323,20 @@ function App() {
                 invited: Array(4).fill(0)
             };
             
-            // Для каждой недели получаем данные
             for (let i = 0; i < weeks.length; i++) {
                 const week = weeks[i];
                 
-                // Сохраняем текущие даты чтобы восстановить после
                 const originalStartDate = window.currentStartDate;
                 const originalEndDate = window.currentEndDate;
                 
-                // Устанавливаем даты для текущей недели
                 window.currentStartDate = week.start;
                 window.currentEndDate = week.end;
                 
                 const weekData = await syncWithBitrix24({
-    operatorId: selectedOperator,
-    stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
-});
+                    operatorId: selectedOperator,
+                    stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
+                });
                 
-                // Фильтруем по оператору если выбран
                 let filteredWeekData = weekData;
                 if (selectedOperator) {
                     filteredWeekData = filterDataByOperator(weekData, selectedOperator);
@@ -383,7 +348,6 @@ function App() {
                     monthlyData.invited[i] = filteredWeekData.leadsCount.invited || 0;
                 }
                 
-                // Восстанавливаем оригинальные даты
                 window.currentStartDate = originalStartDate;
                 window.currentEndDate = originalEndDate;
             }
@@ -567,25 +531,24 @@ function App() {
 
                 <DateFilter onApply={handleDateFilterApply} isLoading={isLoading} />
 
-                {/* НОВЫЙ КОМПОНЕНТ: селектор оператора */}
                 <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 mb-6">
                     <h3 className="text-lg font-semibold text-gray-900 mb-4">Фильтр по оператору</h3>
                     <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-end">
                         <div className="flex-1">
                             <label className="block text-sm font-medium text-gray-700 mb-1">Выберите оператора</label>
                             <select
-    value={selectedOperator || ''}
-    onChange={(e) => handleOperatorChange(e.target.value || null)}
-    className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-    disabled={isLoading || allOperators.length === 0}
->
-    <option value="">Все операторы</option>
-    {allOperators.map(operator => (
-        <option key={operator.ID} value={operator.ID}>
-            {operator.FULL_NAME} {operator.DEPARTMENT ? `(${operator.DEPARTMENT})` : ''}
-        </option>
-    ))}
-</select>
+                                value={selectedOperator || ''}
+                                onChange={(e) => handleOperatorChange(e.target.value || null)}
+                                className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                disabled={isLoading || allOperators.length === 0}
+                            >
+                                <option value="">Все операторы</option>
+                                {allOperators.map(operator => (
+                                    <option key={operator.ID} value={operator.ID}>
+                                        {operator.FULL_NAME} {operator.DEPARTMENT ? `(${operator.DEPARTMENT})` : ''}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
                         
                         <div>
