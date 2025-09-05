@@ -142,6 +142,7 @@ async function backgroundSyncWithBitrix24(filters = {}) {
     try {
         return await syncWithBitrix24(filters);
     } finally {
+        isBackgroundSync = false;
     }
 }
 
@@ -204,7 +205,7 @@ function filterDataByStage(data, stage) {
         },
         operatorsByStage: {
             [stage]: data.operatorsByStage[stage] || [],
-            ...Object.keys(data.operatorsByStage).reduce((acc, key) {
+            ...Object.keys(data.operatorsByStage).reduce((acc, key) => {
                 if (key !== stage) acc[key] = [];
                 return acc;
             }, {})
@@ -428,7 +429,7 @@ function prepareDailyChartData(dailyLeadsData) {
     return result;
 }
 
-// Получение дней текущей недели
+// Получение дней текучной недели
 function getCurrentWeekDays() {
     const days = [];
     const today = new Date();
@@ -471,7 +472,15 @@ function formatDateForInput(date) {
     return formatDateForBitrix(date);
 }
 
-// Экспорт функций для использования в других модулей
+// Делаем функции глобально доступными
+if (typeof window !== 'undefined') {
+    window.syncWithBitrix24 = syncWithBitrix24;
+    window.backgroundSyncWithBitrix24 = backgroundSyncWithBitrix24;
+    window.applyDateFilter = applyDateFilter;
+    console.log('DataSync functions loaded globally');
+}
+
+// Экспорт функций для использования в других модулях
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
         syncWithBitrix24,
