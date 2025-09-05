@@ -245,7 +245,7 @@ function filterDailyDataByOperator(dailyData, operatorId, allLeads) {
     
     Object.keys(dailyData).forEach(hour => {
         const hourLeads = operatorLeads.filter(lead => {
-            const leadHour = new Date(lead.DATE_MODIFY).getHours().toString().padStart(2, '0');
+            const leadHour = new Date(lead.DATE_MODify).getHours().toString().padStart(2, '0');
             return leadHour === hour;
         });
         
@@ -429,7 +429,7 @@ function prepareDailyChartData(dailyLeadsData) {
     return result;
 }
 
-// Получение дней текучной недели
+// Получение дней текущей недели
 function getCurrentWeekDays() {
     const days = [];
     const today = new Date();
