@@ -120,7 +120,10 @@ function App() {
                 throw new Error('Функции синхронизации не загружены');
             }
             
-            const dbData = await syncWithBitrix24();
+            const dbData = await syncWithBitrix24({
+    operatorId: selectedOperator,
+    stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
+});
             
             // Сохраняем всех операторов для селектора
             if (dbData.operators) {
