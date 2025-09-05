@@ -54,9 +54,9 @@ function App() {
         invited: Array(7).fill(0)
     });
     const [dailyLeads, setDailyLeads] = React.useState({
-        callback: Array(13).fill(0),
-        approval: Array(13).fill(0),
-        invited: Array(13).fill(0)
+        callback: Array(24).fill(0),
+        approval: Array(24).fill(0),
+        invited: Array(24).fill(0)
     });
     const [monthlyWeeksLeads, setMonthlyWeeksLeads] = React.useState({
         callback: Array(4).fill(0),
@@ -119,6 +119,9 @@ function App() {
                 throw new Error('Функции синхронизации не загружены');
             }
             
+            const startDate = window.currentStartDate || new Date();
+            const endDate = window.currentEndDate || new Date();
+            
             const dbData = await syncWithBitrix24({
                 operatorId: selectedOperator,
                 stage: selectedStageFilter !== 'all' ? selectedStageFilter : null
@@ -136,26 +139,18 @@ function App() {
             setLeadsData(filteredData.leadsCount || { callback: 0, approval: 0, invited: 0 });
             setOperatorsData(filteredData.operatorsByStage || { callback: [], approval: [], invited: [] });
             
-            if (filteredData.weeklyLeads) {
-                const preparedData = prepareWeeklyChartData(filteredData.weeklyLeads);
+            // Получаем данные для графиков с учетом выбранного периода
+            const weeklyData = await fetchLeadsCountByDay(startDate, endDate);
+            const dailyData = await fetchLeadsCountByHour(startDate, endDate);
+            
+            if (weeklyData) {
+                const preparedData = prepareWeeklyChartData(weeklyData);
                 setWeeklyLeads(preparedData);
-            } else {
-                setWeeklyLeads({
-                    callback: Array(7).fill(0),
-                    approval: Array(7).fill(0),
-                    invited: Array(7).fill(0)
-                });
             }
             
-            if (filteredData.dailyLeads) {
-                const preparedData = prepareDailyChartData(filteredData.dailyLeads);
+            if (dailyData) {
+                const preparedData = prepareDailyChartData(dailyData);
                 setDailyLeads(preparedData);
-            } else {
-                setDailyLeads({
-                    callback: Array(13).fill(0),
-                    approval: Array(13).fill(0),
-                    invited: Array(13).fill(0)
-                });
             }
             
             const monthlyData = await fetchMonthlyWeeksData();
@@ -182,9 +177,9 @@ function App() {
                 invited: Array(7).fill(0)
             });
             setDailyLeads({
-                callback: Array(13).fill(0),
-                approval: Array(13).fill(0),
-                invited: Array(13).fill(0)
+                callback: Array(24).fill(0),
+                approval: Array(24).fill(0),
+                invited: Array(24).fill(0)
             });
             setMonthlyWeeksLeads({
                 callback: Array(4).fill(0),
@@ -228,48 +223,74 @@ function App() {
         };
     };
 
-    const filterWeeklyDataByOperator = (weeklyData, operatorId, allLeads) => {
-        if (!weeklyData) return {};
-        
-        const filteredWeeklyData = {};
-        const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
-        
-        Object.keys(weeklyData).forEach(date => {
-            const dayLeads = operatorLeads.filter(lead => {
-                const leadDate = new Date(lead.DATE_MODIFY).toISOString().split('T')[0];
-                return leadDate === date;
+    const fetchLeadsCountByDay = async (startDate, endDate) => {
+        try {
+            const leads = await fetchBitrixLeads(startDate, endDate);
+            
+            const daysData = {};
+            const currentDate = new Date(startDate);
+            
+            while (currentDate <= endDate) {
+                const dayKey = formatDateForBitrix(new Date(currentDate));
+                daysData[dayKey] = {
+                    callback: 0,
+                    approval: 0,
+                    invited: 0
+                };
+                currentDate.setDate(currentDate.getDate() + 1);
+            }
+            
+            leads.forEach(lead => {
+                if (!lead.DATE_MODIFY) return;
+                
+                const modifyDate = new Date(lead.DATE_MODIFY);
+                const dayKey = formatDateForBitrix(modifyDate);
+                
+                if (daysData[dayKey]) {
+                    const status = mapStatusToStage(lead.STATUS_ID);
+                    daysData[dayKey][status]++;
+                }
             });
             
-            filteredWeeklyData[date] = {
-                callback: dayLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-                approval: dayLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-                invited: dayLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-            };
-        });
-        
-        return filteredWeeklyData;
+            return daysData;
+        } catch (error) {
+            console.error('Error fetching leads count by day:', error);
+            throw error;
+        }
     };
 
-    const filterDailyDataByOperator = (dailyData, operatorId, allLeads) => {
-        if (!dailyData) return {};
-        
-        const filteredDailyData = {};
-        const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
-        
-        Object.keys(dailyData).forEach(hour => {
-            const hourLeads = operatorLeads.filter(lead => {
-                const leadHour = new Date(lead.DATE_MODIFY).getHours().toString().padStart(2, '0');
-                return leadHour === hour;
+    const fetchLeadsCountByHour = async (startDate, endDate) => {
+        try {
+            const leads = await fetchBitrixLeads(startDate, endDate);
+            
+            const hoursData = {};
+            
+            for (let i = 0; i < 24; i++) {
+                const hourKey = i.toString().padStart(2, '0');
+                hoursData[hourKey] = {
+                    callback: 0,
+                    approval: 0,
+                    invited: 0
+                };
+            }
+            
+            leads.forEach(lead => {
+                if (!lead.DATE_MODIFY) return;
+                
+                const modifyDate = new Date(lead.DATE_MODIFY);
+                const hourKey = modifyDate.getHours().toString().padStart(2, '0');
+                
+                if (hoursData[hourKey]) {
+                    const status = mapStatusToStage(lead.STATUS_ID);
+                    hoursData[hourKey][status]++;
+                }
             });
             
-            filteredDailyData[hour] = {
-                callback: hourLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
-                approval: hourLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
-                invited: hourLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
-            };
-        });
-        
-        return filteredDailyData;
+            return hoursData;
+        } catch (error) {
+            console.error('Error fetching leads count by hour:', error);
+            throw error;
+        }
     };
 
     const filterMonthlyDataByOperator = (monthlyData, operatorId, allLeads) => {
@@ -391,36 +412,57 @@ function App() {
 
     const getWeekDayLabels = () => {
         const days = [];
-        const today = new Date();
-        const firstDayOfWeek = new Date(today);
-        firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
+        const startDate = window.currentStartDate || new Date();
+        const endDate = window.currentEndDate || new Date();
+        const currentDate = new Date(startDate);
         
-        for (let i = 0; i < 7; i++) {
-            const day = new Date(firstDayOfWeek);
-            day.setDate(firstDayOfWeek.getDate() + i);
-            days.push(day.toLocaleDateString('ru-RU', { weekday: 'short', day: 'numeric' }));
+        for (let i = 0; i < 7 && currentDate <= endDate; i++) {
+            days.push(currentDate.toLocaleDateString('ru-RU', { 
+                weekday: 'short', 
+                day: 'numeric',
+                month: 'short'
+            }));
+            currentDate.setDate(currentDate.getDate() + 1);
         }
         
         return days;
     };
 
     const getHourLabels = () => {
-        return Array.from({length: 13}, (_, i) => {
-            const hour = i + 8;
-            return `${hour.toString().padStart(2, '0')}:00`;
+        return Array.from({length: 24}, (_, i) => {
+            return `${i.toString().padStart(2, '0')}:00`;
         });
     };
 
     const getWeeklyLabels = () => {
-        return ['1-я неделя', '2-я неделя', '3-я неделя', '4-я неделя'];
+        const startDate = window.currentStartDate || new Date();
+        const endDate = window.currentEndDate || new Date();
+        const diffTime = Math.abs(endDate - startDate);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        
+        if (diffDays <= 7) {
+            return ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'].slice(0, diffDays);
+        } else {
+            const weeks = Math.ceil(diffDays / 7);
+            return Array.from({length: weeks}, (_, i) => `${i + 1}-я неделя`);
+        }
     };
 
     const prepareWeeklyChartData = (weeklyLeadsData) => {
-        const daysOrder = getCurrentWeekDays();
+        const startDate = window.currentStartDate || new Date();
+        const endDate = window.currentEndDate || new Date();
+        const daysOrder = [];
+        
+        const currentDate = new Date(startDate);
+        while (currentDate <= endDate) {
+            daysOrder.push(formatDateForBitrix(new Date(currentDate)));
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
         const result = {
-            callback: Array(7).fill(0),
-            approval: Array(7).fill(0),
-            invited: Array(7).fill(0)
+            callback: Array(daysOrder.length).fill(0),
+            approval: Array(daysOrder.length).fill(0),
+            invited: Array(daysOrder.length).fill(0)
         };
         
         daysOrder.forEach((day, index) => {
@@ -436,38 +478,22 @@ function App() {
 
     const prepareDailyChartData = (dailyLeadsData) => {
         const result = {
-            callback: Array(13).fill(0),
-            approval: Array(13).fill(0),
-            invited: Array(13).fill(0)
+            callback: Array(24).fill(0),
+            approval: Array(24).fill(0),
+            invited: Array(24).fill(0)
         };
         
-        for (let hour = 8; hour <= 20; hour++) {
+        for (let hour = 0; hour < 24; hour++) {
             const hourKey = hour.toString().padStart(2, '0');
-            const index = hour - 8;
             
             if (dailyLeadsData[hourKey]) {
-                result.callback[index] = dailyLeadsData[hourKey].callback || 0;
-                result.approval[index] = dailyLeadsData[hourKey].approval || 0;
-                result.invited[index] = dailyLeadsData[hourKey].invited || 0;
+                result.callback[hour] = dailyLeadsData[hourKey].callback || 0;
+                result.approval[hour] = dailyLeadsData[hourKey].approval || 0;
+                result.invited[hour] = dailyLeadsData[hourKey].invited || 0;
             }
         }
         
         return result;
-    };
-
-    const getCurrentWeekDays = () => {
-        const days = [];
-        const today = new Date();
-        const firstDayOfWeek = new Date(today);
-        firstDayOfWeek.setDate(today.getDate() - today.getDay() + 1);
-        
-        for (let i = 0; i < 7; i++) {
-            const day = new Date(firstDayOfWeek);
-            day.setDate(firstDayOfWeek.getDate() + i);
-            days.push(formatDateForBitrix(day));
-        }
-        
-        return days;
     };
 
     const formatDateForBitrix = (date) => {
@@ -594,46 +620,8 @@ function App() {
                     />
                 </div>
 
-                {/* Графики за текущий день (8:00-20:00) */}
                 <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущий день (8:00-20:00)</h2>
-                    
-                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={dailyLeads.callback || Array(13).fill(0)}
-                                labels={getHourLabels()}
-                                color="#2563eb"
-                                title="Перезвонить"
-                            />
-                        </div>
-                        
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={dailyLeads.approval || Array(13).fill(0)}
-                                labels={getHourLabels()}
-                                color="#f59e0b"
-                                title="На согласовании"
-                            />
-                        </div>
-                        
-                        <div className="dashboard-card">
-                            <LeadsChart 
-                                type="line" 
-                                data={dailyLeads.invited || Array(13).fill(0)}
-                                labels={getHourLabels()}
-                                color="#10b981"
-                                title="Приглашен к рекрутеру"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Графики за текущую неделю */}
-                <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики за текущую неделю</h2>
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики по дням</h2>
                     
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="dashboard-card">
@@ -668,9 +656,44 @@ function App() {
                     </div>
                 </div>
 
-                {/* Сравнение данных по неделям месяца */}
                 <div className="dashboard-card mb-8">
-                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Сравнение данных по неделям</h2>
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Графики по часам</h2>
+                    
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.callback || Array(24).fill(0)}
+                                labels={getHourLabels()}
+                                color="#2563eb"
+                                title="Перезвонить"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.approval || Array(24).fill(0)}
+                                labels={getHourLabels()}
+                                color="#f59e0b"
+                                title="На согласовании"
+                            />
+                        </div>
+                        
+                        <div className="dashboard-card">
+                            <LeadsChart 
+                                type="line" 
+                                data={dailyLeads.invited || Array(24).fill(0)}
+                                labels={getHourLabels()}
+                                color="#10b981"
+                                title="Приглашен к рекрутеру"
+                            />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="dashboard-card mb-8">
+                    <h2 className="text-xl font-semibold mb-6 text-gray-900">Сравнение по неделям</h2>
                     
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                         <div className="dashboard-card">
@@ -767,7 +790,6 @@ function App() {
     );
 }
 
-// НОВАЯ ФУНКЦИЯ: маппинг статусов Bitrix24 на внутренние стадии
 function mapStatusToStage(statusId) {
     const mapping = {
         'IN_PROCESS': 'callback',
@@ -777,7 +799,6 @@ function mapStatusToStage(statusId) {
     return mapping[statusId] || 'callback';
 }
 
-// Новый компонент для столбчатых графиков сравнения по неделям
 function WeeklyComparisonChart({ data, labels, color, title }) {
     const chartRef = React.useRef(null);
     const chartInstance = React.useRef(null);
