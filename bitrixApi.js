@@ -3,10 +3,8 @@
 // Проверяем, есть ли доступ к config (браузер vs Node.js)
 let STATUS_MAP;
 if (typeof window !== 'undefined' && window.STATUS_MAP) {
-    // В браузере - используем глобальные переменные
     STATUS_MAP = window.STATUS_MAP;
 } else {
-    // fallback для тестов или если config не загрузился
     STATUS_MAP = {
         'IN_PROCESS': 'Перезвонить',
         'CONVERTED': 'Приглашен к рекрутеру', 
@@ -44,7 +42,6 @@ function setBitrixConfig(domain, webhook, userId) {
     
     localStorage.setItem('bitrix_config', JSON.stringify(BITRIX_CONFIG));
     window.bitrixConfigured = true;
-    console.log('Bitrix24 config saved:', BITRIX_CONFIG);
 }
 
 // Загрузка конфигурации из localStorage
@@ -55,7 +52,6 @@ function loadBitrixConfig() {
             const config = JSON.parse(saved);
             Object.assign(BITRIX_CONFIG, config);
             window.bitrixConfigured = true;
-            console.log('Bitrix24 config loaded:', BITRIX_CONFIG);
             return true;
         }
     } catch (error) {
@@ -79,8 +75,6 @@ async function bitrixApiCall(method, params = {}) {
     const url = `https://${BITRIX_CONFIG.domain}/rest/${BITRIX_CONFIG.userId}/${BITRIX_CONFIG.webhook}/${method}.json`;
     
     try {
-        console.log('Bitrix API call:', method, params);
-        
         const response = await fetch(url, {
             method: 'POST',
             headers: {
@@ -116,14 +110,11 @@ async function fetchBitrixLeads(startDate, endDate) {
 
         const startDateStr = formatDateForBitrix(startDate);
         const endDateStr = formatDateForBitrix(endDate);
-
-        console.log('Fetching leads for period:', startDateStr, '-', endDateStr);
         
         let allLeads = [];
         let start = 0;
         const batchSize = 50;
         let hasMore = true;
-        let totalLoaded = 0;
 
         // Пагинация - получаем данные порциями
         while (hasMore) {
@@ -144,10 +135,7 @@ async function fetchBitrixLeads(startDate, endDate) {
             }
 
             allLeads = allLeads.concat(leads);
-            totalLoaded += leads.length;
             
-            console.log(`Loaded batch of ${leads.length} leads, total: ${totalLoaded}`);
-
             // Проверяем есть ли еще данные
             if (leads.length < batchSize) {
                 hasMore = false;
@@ -157,8 +145,6 @@ async function fetchBitrixLeads(startDate, endDate) {
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
-
-        console.log(`Total loaded ${allLeads.length} leads from Bitrix24`);
         
         return allLeads.map(lead => ({
             ID: lead.ID,
@@ -181,7 +167,6 @@ async function fetchBitrixUsers() {
         let start = 0;
         const batchSize = 50;
         let hasMore = true;
-        let totalLoaded = 0;
 
         // Пагинация для пользователей
         while (hasMore) {
@@ -206,7 +191,6 @@ async function fetchBitrixUsers() {
                     return !BLACKLISTED_USERS.includes(fullName);
                 })
                 .map(user => {
-                    // Используем WORK_DEPARTMENT если есть, иначе скрываем "Не указан"
                     let departmentName = user.WORK_DEPARTMENT && user.WORK_DEPARTMENT.trim() !== '' 
                         ? user.WORK_DEPARTMENT 
                         : '';
@@ -224,9 +208,6 @@ async function fetchBitrixUsers() {
                 });
 
             allUsers = allUsers.concat(filteredUsers);
-            totalLoaded += users.length;
-            
-            console.log(`Loaded batch of ${users.length} users, filtered to ${filteredUsers.length}, total: ${totalLoaded}`);
 
             if (users.length < batchSize) {
                 hasMore = false;
@@ -235,144 +216,12 @@ async function fetchBitrixUsers() {
                 await new Promise(resolve => setTimeout(resolve, 50));
             }
         }
-
-        console.log(`Total loaded ${allUsers.length} users from Bitrix24 after filtering`);
         
         return allUsers;
     } catch (error) {
         console.error('Error fetching users from Bitrix24:', error);
         throw error;
     }
-}
-
-// Получение количества лидов по дням для каждого статуса
-async function fetchLeadsCountByDay(startDate, endDate) {
-    try {
-        // Получаем все лиды за период
-        const leads = await fetchBitrixLeads(startDate, endDate);
-        
-        // Инициализируем объект для хранения данных по дням
-        const daysData = {};
-        const currentDate = new Date(startDate);
-        
-        // Создаем записи для всех дней в периоде
-        while (currentDate <= endDate) {
-            const dayKey = formatDateForBitrix(new Date(currentDate));
-            daysData[dayKey] = {
-                callback: 0,
-                approval: 0,
-                invited: 0
-            };
-            currentDate.setDate(currentDate.getDate() + 1);
-        }
-        
-        // Заполняем данными
-        leads.forEach(lead => {
-            if (!lead.DATE_MODIFY) return;
-            
-            const modifyDate = new Date(lead.DATE_MODIFY);
-            const dayKey = formatDateForBitrix(modifyDate);
-            
-            if (daysData[dayKey]) {
-                const status = mapStatusToStage(lead.STATUS_ID);
-                daysData[dayKey][status]++;
-            }
-        });
-        
-        return daysData;
-    } catch (error) {
-        console.error('Error fetching leads count by day:', error);
-        throw error;
-    }
-}
-
-// Получение количества лидов по часам для каждого статуса
-async function fetchLeadsCountByHour(startDate, endDate) {
-    try {
-        // Получаем все лиды за период
-        const leads = await fetchBitrixLeads(startDate, endDate);
-        
-        // Инициализируем объект для хранения данных по часам
-        const hoursData = {};
-        
-        // Создаем записи для всех часов (00-23)
-        for (let i = 0; i < 24; i++) {
-            const hourKey = i.toString().padStart(2, '0');
-            hoursData[hourKey] = {
-                callback: 0,
-                approval: 0,
-                invited: 0
-            };
-        }
-        
-        // Заполняем данными
-        leads.forEach(lead => {
-            if (!lead.DATE_MODIFY) return;
-            
-            const modifyDate = new Date(lead.DATE_MODIFY);
-            const hourKey = modifyDate.getHours().toString().padStart(2, '0');
-            
-            if (hoursData[hourKey]) {
-                const status = mapStatusToStage(lead.STATUS_ID);
-                hoursData[hourKey][status]++;
-            }
-        });
-        
-        return hoursData;
-    } catch (error) {
-        console.error('Error fetching leads count by hour:', error);
-        throw error;
-    }
-}
-
-// Получение данных за текущую неделю
-async function fetchWeeklyLeadsData() {
-    try {
-        // Определяем даты начала и конца текущей недели
-        const today = new Date();
-        const startOfWeek = new Date(today);
-        startOfWeek.setDate(today.getDate() - today.getDay() + 1); // Понедельник
-        startOfWeek.setHours(0, 0, 0, 0);
-        
-        const endOfWeek = new Date(startOfWeek);
-        endOfWeek.setDate(startOfWeek.getDate() + 6); // Воскресенье
-        endOfWeek.setHours(23, 59, 59, 999);
-        
-        // Получаем данные за неделю
-        return await fetchLeadsCountByDay(startOfWeek, endOfWeek);
-    } catch (error) {
-        console.error('Error fetching weekly leads data:', error);
-        return {};
-    }
-}
-
-// Получение данных за текущий день
-async function fetchDailyLeadsData() {
-    try {
-        // Определяем даты начала и конца текущего дня
-        const today = new Date();
-        const startOfDay = new Date(today);
-        startOfDay.setHours(0, 0, 0, 0);
-        
-        const endOfDay = new Date(today);
-        endOfDay.setHours(23, 59, 59, 999);
-        
-        // Получаем данные за день
-        return await fetchLeadsCountByHour(startOfDay, endOfDay);
-    } catch (error) {
-        console.error('Error fetching daily leads data:', error);
-        return {};
-    }
-}
-
-// Маппинг статусов Bitrix24 на внутренние стадии
-function mapStatusToStage(statusId) {
-    const mapping = {
-        'IN_PROCESS': 'callback',
-        'UC_A2DF81': 'approval',
-        'CONVERTED': 'invited'
-    };
-    return mapping[statusId] || 'callback';
 }
 
 // Вспомогательные функции для форматирования дат
@@ -411,21 +260,4 @@ function formatDateTimeDisplay(date) {
     } catch (error) {
         return 'Неизвестно';
     }
-}
-
-// Экспорт функций для использования в других модулях
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = {
-        setBitrixConfig,
-        loadBitrixConfig,
-        isBitrixConfigured,
-        bitrixApiCall,
-        fetchBitrixLeads,
-        fetchBitrixUsers,
-        fetchWeeklyLeadsData,
-        fetchDailyLeadsData,
-        formatDateForBitrix,
-        formatDateForInput,
-        formatDateTimeDisplay
-    };
 }
