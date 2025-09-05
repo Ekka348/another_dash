@@ -28,12 +28,12 @@ if (typeof isBitrixConfigured === 'undefined') {
 const EMPTY_LEADS_COUNT = { callback: 0, approval: 0, invited: 0 };
 const EMPTY_OPERATORS_BY_STAGE = { callback: [], approval: [], invited: [] };
 
-async function syncWithBitrix24() {
+async function syncWithBitrix24(filters = {}) {
     try {
         if (isBackgroundSync) {
-            console.log('Фоновая синхронизация с Bitrix24...');
+            console.log('Фоновая синхронизация с Bitrix24...', filters);
         } else {
-            console.log('Синхронизация с Bitrix24...');
+            console.log('Синхронизация с Bitrix24...', filters);
         }
         
         // Проверяем конфигурацию Bitrix24
@@ -97,8 +97,17 @@ async function syncWithBitrix24() {
         // Обрабатываем данные для дашборда
         const processedData = processLeadsData(leads, operators);
 
+        // Применяем фильтры если они есть
+        let filteredData = processedData;
+        if (filters.operatorId) {
+            filteredData = filterDataByOperator(processedData, filters.operatorId);
+        }
+        if (filters.stage) {
+            filteredData = filterDataByStage(filteredData, filters.stage);
+        }
+
         return {
-            ...processedData,
+            ...filteredData,
             weeklyLeads,
             dailyLeads,
             lastSync: new Date().toISOString(),
@@ -128,13 +137,126 @@ async function syncWithBitrix24() {
 }
 
 // Функция для фоновой синхронизации
-async function backgroundSyncWithBitrix24() {
+async function backgroundSyncWithBitrix24(filters = {}) {
     isBackgroundSync = true;
     try {
-        return await syncWithBitrix24();
+        return await syncWithBitrix24(filters);
     } finally {
         isBackgroundSync = false;
     }
+}
+
+// Фильтрация данных по оператору
+function filterDataByOperator(data, operatorId) {
+    const filteredLeads = data.leads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+    
+    // Пересчитываем количество лидов по стадиям
+    const leadsCount = {
+        callback: filteredLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
+        approval: filteredLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
+        invited: filteredLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
+    };
+    
+    // Пересчитываем операторов по стадиям (только выбранный оператор)
+    const operatorsByStage = {
+        callback: data.operatorsByStage.callback.filter(op => op.id == operatorId),
+        approval: data.operatorsByStage.approval.filter(op => op.id == operatorId),
+        invited: data.operatorsByStage.invited.filter(op => op.id == operatorId)
+    };
+    
+    // Фильтруем недельные данные
+    const weeklyLeads = filterWeeklyDataByOperator(data.weeklyLeads, operatorId, data.leads);
+    
+    // Фильтруем дневные данные
+    const dailyLeads = filterDailyDataByOperator(data.dailyLeads, operatorId, data.leads);
+    
+    return {
+        ...data,
+        leads: filteredLeads,
+        leadsCount,
+        operatorsByStage,
+        weeklyLeads,
+        dailyLeads
+    };
+}
+
+// Фильтрация данных по стадии
+function filterDataByStage(data, stage) {
+    const stageMapping = {
+        'callback': 'IN_PROCESS',
+        'approval': 'UC_A2DF81', 
+        'invited': 'CONVERTED'
+    };
+    
+    const statusId = stageMapping[stage];
+    if (!statusId) return data;
+    
+    const filteredLeads = data.leads.filter(lead => lead.STATUS_ID === statusId);
+    
+    return {
+        ...data,
+        leads: filteredLeads,
+        leadsCount: {
+            [stage]: filteredLeads.length,
+            ...Object.keys(data.leadsCount).reduce((acc, key) => {
+                if (key !== stage) acc[key] = 0;
+                return acc;
+            }, {})
+        },
+        operatorsByStage: {
+            [stage]: data.operatorsByStage[stage] || [],
+            ...Object.keys(data.operatorsByStage).reduce((acc, key) => {
+                if (key !== stage) acc[key] = [];
+                return acc;
+            }, {})
+        }
+    };
+}
+
+// Фильтрация недельных данных по оператору
+function filterWeeklyDataByOperator(weeklyData, operatorId, allLeads) {
+    if (!weeklyData) return {};
+    
+    const filteredWeeklyData = {};
+    const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+    
+    Object.keys(weeklyData).forEach(date => {
+        const dayLeads = operatorLeads.filter(lead => {
+            const leadDate = new Date(lead.DATE_MODIFY).toISOString().split('T')[0];
+            return leadDate === date;
+        });
+        
+        filteredWeeklyData[date] = {
+            callback: dayLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
+            approval: dayLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
+            invited: dayLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
+        };
+    });
+    
+    return filteredWeeklyData;
+}
+
+// Фильтрация дневных данных по оператору
+function filterDailyDataByOperator(dailyData, operatorId, allLeads) {
+    if (!dailyData) return {};
+    
+    const filteredDailyData = {};
+    const operatorLeads = allLeads.filter(lead => lead.ASSIGNED_BY_ID == operatorId);
+    
+    Object.keys(dailyData).forEach(hour => {
+        const hourLeads = operatorLeads.filter(lead => {
+            const leadHour = new Date(lead.DATE_MODIFY).getHours().toString().padStart(2, '0');
+            return leadHour === hour;
+        });
+        
+        filteredDailyData[hour] = {
+            callback: hourLeads.filter(lead => lead.STATUS_ID === 'IN_PROCESS').length,
+            approval: hourLeads.filter(lead => lead.STATUS_ID === 'UC_A2DF81').length,
+            invited: hourLeads.filter(lead => lead.STATUS_ID === 'CONVERTED').length
+        };
+    });
+    
+    return filteredDailyData;
 }
 
 // Обработка данных лидов для дашборда
@@ -161,7 +283,7 @@ function processLeadsData(leads, operators) {
         operatorsMap[op.ID] = {
             id: op.ID,
             name: op.FULL_NAME || `Оператор #${op.ID}`,
-            department: op.DEPARTMENT || 'Не указан',
+            department: op.DEPARTMENT || '',
             status: op.IS_ONLINE ? 'active' : 'offline',
             lastActivity: formatRelativeTime(op.LAST_ACTIVITY_DATE || new Date().toISOString())
         };
